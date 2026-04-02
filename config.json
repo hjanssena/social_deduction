@@ -1,0 +1,6 @@
+{
+    "discussion": {
+        "max_assertions_per_day": 8,
+        "speaker_weight_decay": 0.5
+    }
+}
