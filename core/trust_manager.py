@@ -1,13 +1,23 @@
 class TrustManager:
+    TRUST_MIN = 0
+    TRUST_MAX = 100
+    TRUST_NEUTRAL = 50
+    TRUST_HOSTILE_THRESHOLD = 30
+    TRUST_SUSPICIOUS_THRESHOLD = 45
+    TRUST_FRIENDLY_THRESHOLD = 55
+    TRUST_ALLIED_THRESHOLD = 75
+
     # Baseline modifiers on a 0-100 scale
     INTENT_MODIFIERS = {
-        "defend": 10,
-        "agree": 5,
-        "neutral": 0,
-        "question": -2,
-        "deflect": -3,
-        "disagree": -5,
-        "accuse": -10
+        "agree": 5,             # Target likes that you agree with them
+        "defend_other": 8,      # Target loves that you protected them
+        "accuse": -8,           # Target hates that you accused them
+        "disagree": -3,         # Target dislikes that you argue with them
+        "defend_self": -2,      # Target is slightly annoyed you are resisting their accusation
+        "deflect": -4,          # Target thinks you are being shady
+        "question": -1,         # Target is slightly put on the spot
+        "neutral": 0,            # No effect
+        "vote_lynch": -25
     }
 
     @staticmethod
@@ -15,7 +25,9 @@ class TrustManager:
         """
         Calculates how much the Target's trust in the Source changes based on the Source's intent.
         """
+        # Fetch the base shift from the updated dictionary
         base_shift = TrustManager.INTENT_MODIFIERS.get(intent, 0)
+        
         if base_shift == 0:
             return 0
 
@@ -44,11 +56,63 @@ class TrustManager:
         
         if shift != 0:
             current_trust = game_state.trust_matrix[target][source]
-            # Clamp the value so it never goes below 0 or above 100
-            new_trust = max(0, min(100, current_trust + shift))
+            new_trust = max(TrustManager.TRUST_MIN, min(TrustManager.TRUST_MAX, current_trust + shift))
             
             game_state.trust_matrix[target][source] = new_trust
             
-            # Optional: Print to terminal for debugging
-            trend = "++" if shift > 0 else "--"
-            print(f"[Trust Shift] {target} {trend} {source} ({shift:+d}) -> New Trust: {new_trust}")
+            if shift > 0:
+                print(f"{target} has increased their trust in {source}")
+            elif shift < 0:
+                print(f"{target} has decreased their trust in {source}")
+
+    @staticmethod
+    def get_relationship_prompt(trust_score: int) -> str:
+        """Translates a numerical trust score into an LLM behavioral prompt."""
+        if trust_score < TrustManager.TRUST_HOSTILE_THRESHOLD:
+            return "You deeply distrust and despise them. Be openly hostile or dismissive."
+        elif trust_score < TrustManager.TRUST_SUSPICIOUS_THRESHOLD:
+            return "You are suspicious of them. Question their motives and be guarded."
+        elif trust_score <= TrustManager.TRUST_FRIENDLY_THRESHOLD:
+            return "You are emotionally neutral towards them."
+        elif trust_score < TrustManager.TRUST_ALLIED_THRESHOLD:
+            return "You trust them. Be supportive and inclined to agree with them."
+        else:
+            return "You completely trust them with your life. Defend them aggressively."
+        
+    @staticmethod
+    def get_all_relationships_prompt(character_name: str, game_state) -> str:
+        """Generates a text summary of a character's strongest feelings towards others."""
+        if character_name not in game_state.trust_matrix:
+            return ""
+            
+        relationships = []
+        for other_name, trust_score in game_state.trust_matrix[character_name].items():
+            if other_name == character_name:
+                continue
+
+            if trust_score < TrustManager.TRUST_HOSTILE_THRESHOLD:
+                relationships.append(f"You deeply distrust and despise {other_name}.")
+            elif trust_score < TrustManager.TRUST_SUSPICIOUS_THRESHOLD:
+                relationships.append(f"You are highly suspicious of {other_name}.")
+            elif trust_score >= TrustManager.TRUST_ALLIED_THRESHOLD:
+                relationships.append(f"You completely trust and will protect {other_name}.")
+            elif trust_score >= TrustManager.TRUST_FRIENDLY_THRESHOLD:
+                relationships.append(f"You generally trust {other_name}.")
+
+        if relationships:
+            return " ".join(relationships)
+        return "You currently have neutral feelings towards everyone."
+    
+    @staticmethod
+    def apply_global_trust_shift(game_state, target: str, shift: int):
+        """Applies a trust shift from all alive NPCs towards a single target."""
+        for npc in game_state.alive_characters:
+            if npc != target and npc != "Player":
+                current_trust = game_state.trust_matrix[npc].get(target, TrustManager.TRUST_NEUTRAL)
+                new_trust = max(TrustManager.TRUST_MIN, min(TrustManager.TRUST_MAX, current_trust + shift))
+                game_state.trust_matrix[npc][target] = new_trust
+                
+        if shift > 0:
+            print(f"The whole town now trusts you more!")
+        elif shift < 0:
+            print(f"The whole town now trusts you less!")

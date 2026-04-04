@@ -8,6 +8,7 @@ class Character:
         self.speech_pattern = profile_data["speech_pattern"]
         self.verbal_quirks = profile_data["verbal_quirks"]
         self.is_alive = True
+        self.prologue_reactions = profile_data.get("prologue_reactions", [])
         
         # Parse mechanical stats, defaulting to 5 if missing
         stats = profile_data.get("stats", {})

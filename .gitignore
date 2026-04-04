@@ -146,3 +146,4 @@ target/
 
 # Specific model file
 Qwen2.5-7B-q4_k_m.gguf
+llms/
