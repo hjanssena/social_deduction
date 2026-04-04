@@ -1,6 +1,5 @@
 from core.trust_manager import TrustManager
-
-VALID_INTENTS = ["accuse", "defend_other", "defend_self", "agree", "disagree", "deflect", "question", "neutral"]
+from services.prompt_service import VALID_INTENTS
 
 class PlayerController:
     def __init__(self, gm):
@@ -49,7 +48,7 @@ class PlayerController:
 
         parsed_data["target"] = safe_target
 
-        if parsed_data.get("intent") not in VALID_INTENTS:
+        if parsed_data.get("intent") not in VALID_INTENTS.split("|"):
             self.io.display(f"\033[93m[Warning] Invalid intent '{parsed_data.get('intent')}'. Defaulting to 'neutral'.\033[0m")
             parsed_data["intent"] = "neutral"
 

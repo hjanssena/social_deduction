@@ -14,7 +14,7 @@ class LLMService:
             {"n_gpu_layers": 30, "n_ctx": 2048},
             {"n_gpu_layers": 25, "n_ctx": 1536},
             {"n_gpu_layers": 20, "n_ctx": 1536},
-            {"n_gpu_layers": 20, "n_ctx": 1024},
+            {"n_gpu_layers": 15, "n_ctx": 1536},
             {"n_gpu_layers": 15, "n_ctx": 1024},
             {"n_gpu_layers": 0,  "n_ctx": 1024},
         ]
@@ -41,9 +41,9 @@ class LLMService:
 
         raise RuntimeError("❌ Could not initialize LLM with any configuration")
 
-    def generate_json(self, system_prompt: str, user_prompt: str) -> dict:
-        """Phase 1: Cold Brain. Reads from config['llm']['logic']"""
-        logic_cfg = self.config.get("logic", {})
+    def generate_json(self, system_prompt: str, user_prompt: str, use_narrative_cfg: bool = False) -> dict:
+        """Generates a JSON response. Uses logic config by default, narrative config if flagged."""
+        cfg = self.config.get("narrative" if use_narrative_cfg else "logic", {})
         
         response = self.llm.create_chat_completion(
             messages=[
@@ -51,11 +51,11 @@ class LLMService:
                 {"role": "user", "content": user_prompt}
             ],
             response_format={"type": "json_object"},
-            temperature=logic_cfg.get("temperature", 0.3),
-            min_p=logic_cfg.get("min_p", 0.05),
-            top_k=logic_cfg.get("top_k", 40),
-            repeat_penalty=logic_cfg.get("repeat_penalty", 1.05),
-            max_tokens=2048
+            temperature=cfg.get("temperature", 0.3),
+            min_p=cfg.get("min_p", 0.05),
+            top_k=cfg.get("top_k", 40),
+            repeat_penalty=cfg.get("repeat_penalty", 1.05),
+            max_tokens=512
         )
 
         response_text = response['choices'][0]['message']['content'].strip()
@@ -90,7 +90,7 @@ class LLMService:
             min_p=narrative_cfg.get("min_p", 0.05),
             top_k=narrative_cfg.get("top_k", 40),
             repeat_penalty=narrative_cfg.get("repeat_penalty", 1.05),
-            max_tokens=350 # Bump this up slightly so it has room to think AND speak!
+            max_tokens=512
         )
         
         raw_text = response['choices'][0]['message']['content'].strip()

@@ -15,7 +15,7 @@ class TrustManager:
         "disagree": -3,         # Target dislikes that you argue with them
         "defend_self": -2,      # Target is slightly annoyed you are resisting their accusation
         "deflect": -4,          # Target thinks you are being shady
-        "question": -1,         # Target is slightly put on the spot
+        "question": 0,          # Neutral — information-seeking, not an attack
         "neutral": 0,            # No effect
         "vote_lynch": -25
     }

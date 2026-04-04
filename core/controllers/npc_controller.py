@@ -62,7 +62,7 @@ class NPCController:
         player_status = self.gm.player_controller.get_status(current_assertion)
         roster_text = self.gm.get_roster_text()
         
-        main_topic = "Victor's uncle has mysteriously disappeared." if self.gm.state.phase.name == "PROLOGUE" else f"Day {self.gm.state.day}: Find the killer."
+        main_topic = self.gm.state.main_topic
 
         # --- PHASE 1: LOGIC ---
         logic_prompt = self.gm.prompt_builder.build_logic_prompt(
@@ -82,13 +82,14 @@ class NPCController:
         if not logic_data:
             return None
             
-        thoughts = logic_data.get("thought_process", "Thinking...")
+        situation = logic_data.get("situation_analysis", "")
+        strategy = logic_data.get("strategic_thought", "")
         intent = logic_data.get("intent", "neutral")
         safe_target = self.gm.sanitize_target(logic_data.get("target", "None"))
         emotion = logic_data.get("emotion", "neutral")
         reasoning = logic_data.get("reasoning", "No reason given.")
 
-        print(f"\n\033[90m[Brain ({speaker_name})]: {thoughts} -> [{intent} {safe_target} ({emotion})]\033[0m")
+        print(f"\n\033[90m[Brain ({speaker_name})]: {situation} {strategy} -> [{intent} {safe_target} ({emotion})]\033[0m")
 
         # Update Logic Track & Apply Trust
         self.gm.state.logical_history.append(f"{speaker_name} [{intent}] -> {safe_target} (Emotion: {emotion}). Reason: {reasoning}")
@@ -108,7 +109,8 @@ class NPCController:
             character=char_obj
         )
 
-        raw_dialogue = self.gm.llm.generate_text(system_prompt, narrative_prompt)
+        narrative_data = self.gm.llm.generate_json(system_prompt, narrative_prompt, use_narrative_cfg=True)
+        raw_dialogue = narrative_data.get("dialogue", "... (Glares in silence)")
 
         # Package it up to send back to GameMaster
         return {
@@ -135,7 +137,7 @@ class NPCController:
             logical_history=self.gm.state.logical_history,
             alive_characters=self.gm.state.alive_characters,
             public_events=self.gm.state.public_events,
-            main_topic="React to the statement.",
+            main_topic=self.gm.state.main_topic,
             speaker_name=reactor_name,
             window_size=self.gm.config.get("chat_history_window", 5),
             current_event=logical_event,
@@ -150,13 +152,14 @@ class NPCController:
             print(f"\033[90m[Brain ({reactor_name})]: ... (no response)\033[0m")
             return
 
-        thoughts = logic_data.get("thought_process", "Thinking...")
+        situation = logic_data.get("situation_analysis", "")
+        strategy = logic_data.get("strategic_thought", "")
         intent = logic_data.get("intent", "neutral")
         safe_target = self.gm.sanitize_target(logic_data.get("target", "None"))
         emotion = logic_data.get("emotion", "neutral")
         reasoning = logic_data.get("reasoning", "No reason given.")
 
-        print(f"\033[90m[Brain ({reactor_name})]: {thoughts} -> [{intent} {safe_target} ({emotion})]\033[0m")
+        print(f"\033[90m[Brain ({reactor_name})]: {situation} {strategy} -> [{intent} {safe_target} ({emotion})]\033[0m")
 
         # Update Logic Track & Apply Trust
         self.gm.state.logical_history.append(f"{reactor_name} [{intent}] -> {safe_target} (Emotion: {emotion}). Reason: {reasoning}")
@@ -172,13 +175,14 @@ class NPCController:
             emotion=emotion,
             reasoning=reasoning,
             chat_history=self.gm.state.chat_history,
-            main_topic="React to the statement.",
+            main_topic=self.gm.state.main_topic,
             public_events=self.gm.state.public_events,
             roster_text=self.gm.get_roster_text(),
             character=reactor_obj
         )
 
-        raw_dialogue = self.gm.llm.generate_text(system_prompt, narrative_prompt)
+        narrative_data = self.gm.llm.generate_json(system_prompt, narrative_prompt, use_narrative_cfg=True)
+        raw_dialogue = narrative_data.get("dialogue", "... (Glares in silence)")
 
         display_target = safe_target if safe_target != "None" else "Room"
         self.gm.state.chat_history.append(f"[{reactor_name} -> {display_target}]: {raw_dialogue}")
@@ -244,3 +248,21 @@ class NPCController:
             return action_data
 
         return {"thought_process": "I thirst for blood.", "target": random.choice(valid_targets) if valid_targets else "None"}
+
+    def generate_final_words(self, character_name: str) -> str:
+        """Generates a condemned NPC's last words before execution."""
+        char_obj = self.gm.characters[character_name]
+        role = self.gm.state.roles.get(character_name, "villager")
+        werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
+        system_prompt = self.gm.prompt_builder.build_system_prompt(char_obj, role, known_werewolves=werewolves)
+
+        user_prompt = self.gm.prompt_builder.build_final_words_prompt(
+            character_name=character_name,
+            secret_role=role,
+            alive_characters=self.gm.state.alive_characters,
+            chat_history=self.gm.state.chat_history,
+            character=char_obj
+        )
+
+        dialogue = self.gm.llm.generate_text(system_prompt, user_prompt)
+        return dialogue if dialogue else "..."

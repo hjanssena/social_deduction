@@ -92,6 +92,31 @@ class VotingPhase:
 
             time.sleep(REVEAL_PAUSE_SECONDS)
 
+    def _final_words(self, condemned: str):
+        """Gives the condemned character a chance to speak before execution."""
+        gm = self.gm
+        io = gm.io
+        state = gm.state
+
+        io.display(f"\n\033[36m--- {condemned}'s Final Words ---\033[0m")
+
+        if condemned == "Player":
+            last_words = io.prompt("\033[93m[Speak your final words] >\033[0m ")
+            if last_words.strip():
+                state.chat_history.append(f"[{condemned} -> Room]: {last_words}")
+                state.logical_history.append(
+                    f"{condemned} [final_words] -> Room (Emotion: desperate). Reason: Last words before execution."
+                )
+        else:
+            last_words = gm.npc_controller.generate_final_words(condemned)
+            io.display(f"[{condemned}]: {last_words}")
+            state.chat_history.append(f"[{condemned} -> Room]: {last_words}")
+            state.logical_history.append(
+                f"{condemned} [final_words] -> Room (Emotion: desperate). Reason: Last words before execution."
+            )
+
+        io.pause()
+
     def _tally_and_execute(self, all_votes):
         gm = self.gm
         io = gm.io
@@ -124,11 +149,29 @@ class VotingPhase:
                 lynched_char = tied_characters[0]
                 io.display(f"\n\033[91mThe town has spoken. {lynched_char} is dragged to the gallows...\033[0m")
 
+                # Final words — before execution
+                self._final_words(lynched_char)
+
                 state.alive_characters.remove(lynched_char)
                 state.public_events.append(f"Day {state.day} Voting: {lynched_char} was lynched by the town.")
 
+                lynched_role = state.roles.get(lynched_char, "villager")
+                if lynched_role == "werewolf":
+                    io.display(f"\n\033[92m{lynched_char} was a WEREWOLF! The town got one right.\033[0m")
+                    state.public_events.append(f"Day {state.day}: {lynched_char} was revealed as a werewolf.")
+                else:
+                    io.display(f"\n\033[93m{lynched_char} was an innocent villager. The town has made a grave mistake.\033[0m")
+                    state.public_events.append(f"Day {state.day}: {lynched_char} was innocent. The real killer is still free.")
+
                 if lynched_char == "Player":
                     io.display("\n\033[91m[GAME OVER] You have been lynched by the town.\033[0m")
+                    state.phase = GamePhase.GAME_OVER
+                    return
+
+                result = state.check_win_condition()
+                if result:
+                    from core.game_state import WIN_MESSAGES
+                    io.display(WIN_MESSAGES[result])
                     state.phase = GamePhase.GAME_OVER
                     return
 

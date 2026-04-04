@@ -1,7 +1,7 @@
 import random
 from collections import Counter
 
-from core.game_state import GamePhase
+from core.game_state import GamePhase, WIN_MESSAGES
 
 
 class NightPhase:
@@ -19,31 +19,17 @@ class NightPhase:
         io.display("                 THE NIGHT PHASE")
         io.display("="*50 + "\033[0m\n")
 
+        result = state.check_win_condition()
+        if result:
+            io.display(WIN_MESSAGES[result])
+            state.phase = GamePhase.GAME_OVER
+            return
+
         alive_werewolves = [name for name in state.alive_characters if state.roles.get(name) == "werewolf"]
         alive_villagers = [name for name in state.alive_characters if state.roles.get(name) != "werewolf"]
 
-        if self._check_win_conditions(alive_werewolves, alive_villagers):
-            return
-
         killed_target = self._resolve_kill(alive_werewolves, alive_villagers)
         self._execute_kill(killed_target)
-
-    def _check_win_conditions(self, alive_werewolves, alive_villagers) -> bool:
-        """Returns True if the game is over."""
-        io = self.gm.io
-        state = self.gm.state
-
-        if len(alive_werewolves) == 0:
-            io.display("\n\033[92m[VICTORY] All werewolves have been eliminated! The village is safe.\033[0m")
-            state.phase = GamePhase.GAME_OVER
-            return True
-
-        if len(alive_werewolves) >= len(alive_villagers):
-            io.display("\n\033[91m[DEFEAT] The werewolves now outnumber the villagers. The town falls to the beasts.\033[0m")
-            state.phase = GamePhase.GAME_OVER
-            return True
-
-        return False
 
     def _resolve_kill(self, alive_werewolves, alive_villagers) -> str:
         """Determines who the werewolves kill tonight."""
@@ -103,14 +89,22 @@ class NightPhase:
             state.public_events.append(
                 f"Night {state.day}: {killed_target} was brutally killed by the werewolves."
             )
+            state.main_topic = f"{killed_target} was murdered last night. The killer is still among us."
 
             if killed_target == "Player":
                 io.display("\n\033[91m[GAME OVER] You were murdered by the werewolves in your sleep.\033[0m")
                 state.phase = GamePhase.GAME_OVER
                 return
+
+            result = state.check_win_condition()
+            if result:
+                io.display(WIN_MESSAGES[result])
+                state.phase = GamePhase.GAME_OVER
+                return
         else:
             io.display("\n\033[92m[System] The morning sun rises. Miraculously, everyone survived the night.\033[0m")
             state.public_events.append(f"Night {state.day}: No one was killed.")
+            state.main_topic = "No one died last night, but the killer is still out there."
 
         io.pause("\n\033[90m[Press Enter to start the next day] >\033[0m ")
 
