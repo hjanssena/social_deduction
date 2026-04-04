@@ -1,6 +1,8 @@
 {
     "setup": {
-        "werewolf_count": 1
+        "werewolf_count": 2,
+        "guardian_angel_count": 1,
+        "coroner_count": 1
     },
     "discussion": {
         "decay_factor": 0.2,
@@ -12,7 +14,16 @@
         "global_trust_penalty": 5,
         "silence_under_fire_penalty": 10
     },
+    "debug": {
+        "show_logic": true,
+        "show_narrative": true
+    },
     "llm": {
+        "backend": "ollama",
+        "model_path": "./llms/Mistral-Nemo-Instruct-2407-Q4_K_M.gguf",
+        "chat_format": "auto",
+        "model": "qwen3.5:cloud",
+        "ollama_url": "http://localhost:11434",
         "logic": {
             "temperature": 0.1,
             "min_p": 0.05,
@@ -20,7 +31,7 @@
             "repeat_penalty": 1.1
         },
         "narrative": {
-            "temperature": 0.55,
+            "temperature": 0.4,
             "min_p": 0.05,
             "top_k": 40,
             "repeat_penalty": 1.1

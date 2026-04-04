@@ -9,7 +9,8 @@ class GameMaster:
     def __init__(self, llm_service, prompt_service, characters, config, io=None):
         self.llm = llm_service
         self.prompt_builder = prompt_service
-        self.config = config
+        self.config = config.get("discussion", {})
+        self.debug = config.get("debug", {})
         self.io = io or IOHandler()
         self.characters = {c.name: c for c in characters}
         self.state = GameState(characters, config)
@@ -40,15 +41,24 @@ class GameMaster:
 
     # --- Shared helpers used by controllers and phases ---
 
-    def get_roster_text(self) -> str:
-        """Builds a brief summary of everyone currently alive in the room."""
-        roster = ["- Player: A traveler that arrived just to stay the night."]
+    def get_roster_text(self, viewer: str = None) -> str:
+        """Builds a brief summary of everyone currently alive, with opinions if available."""
+        viewer_opinions = self.state.opinions.get(viewer, {}) if viewer else {}
+        roster = []
         for name in self.state.alive_characters:
             if name == "Player":
-                continue
-            char_obj = self.characters.get(name)
-            if char_obj:
-                roster.append(f"- {name}: {char_obj.occupation.capitalize()}.")
+                entry = "- Player: A traveler that arrived just to stay the night."
+            else:
+                char_obj = self.characters.get(name)
+                if not char_obj:
+                    continue
+                entry = f"- {name}: {char_obj.occupation.capitalize()}."
+
+            if viewer and name != viewer:
+                opinion = viewer_opinions.get(name)
+                if opinion:
+                    entry += f" ({opinion})"
+            roster.append(entry)
         return "\n".join(roster)
 
     def sanitize_target(self, target: str) -> str:

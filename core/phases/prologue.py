@@ -87,6 +87,16 @@ class ProloguePhase:
             else:
                 io.display("\033[91mYou are the lone werewolf. Trust no one.\033[0m")
             io.display("\033[91mGoal: Deceive the town, survive the voting phase, and eliminate them all.\033[0m")
+        elif player_role == "guardian_angel":
+            io.display("\033[94mYou are the GUARDIAN ANGEL.\033[0m")
+            io.display("\033[94mEach night, you may protect one person from the werewolf attack.\033[0m")
+            io.display("\033[94mYou cannot protect yourself. You cannot protect the same person two nights in a row.\033[0m")
+            io.display("\033[94mGoal: Keep the innocent alive and help the town find the werewolves.\033[0m")
+        elif player_role == "coroner":
+            io.display("\033[95mYou are the CORONER.\033[0m")
+            io.display("\033[95mAfter each lynch, you privately learn the true role of the executed person.\033[0m")
+            io.display("\033[95mThe town will NOT see public role reveals while you are alive.\033[0m")
+            io.display("\033[95mGoal: Use your knowledge wisely during discussion to guide the town.\033[0m")
         else:
             io.display("\033[92mYou are an INNOCENT VILLAGER.\033[0m")
             io.display("\033[92mGoal: Find the werewolves, convince the town, and vote to lynch them before it's too late.\033[0m")

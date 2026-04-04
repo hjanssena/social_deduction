@@ -103,6 +103,78 @@ class TrustManager:
             return " ".join(relationships)
         return "You currently have neutral feelings towards everyone."
     
+    # Opinion labels: keyed by (trust_tier, last_intent_toward_me)
+    # trust_tier: "hostile", "suspicious", "neutral", "friendly", "allied"
+    # Falls back to trust-only opinion if no interaction found
+    TRUST_OPINIONS = {
+        "hostile": "Dangerous, don't trust",
+        "suspicious": "Suspicious, watching closely",
+        "neutral": "No strong feelings",
+        "friendly": "Seems trustworthy",
+        "allied": "Trusted ally, will defend",
+    }
+
+    INTENT_OPINION_MODIFIERS = {
+        "accuse": "Accused me",
+        "defend_other": "Defended me",
+        "agree": "Sided with me",
+        "disagree": "Argued against me",
+        "vote_lynch": "Voted to kill me",
+        "defend_self": "Denied my claims",
+        "deflect": "Dodged my question",
+    }
+
+    @staticmethod
+    def get_trust_tier(trust_score: int) -> str:
+        if trust_score < TrustManager.TRUST_HOSTILE_THRESHOLD:
+            return "hostile"
+        elif trust_score < TrustManager.TRUST_SUSPICIOUS_THRESHOLD:
+            return "suspicious"
+        elif trust_score <= TrustManager.TRUST_FRIENDLY_THRESHOLD:
+            return "neutral"
+        elif trust_score < TrustManager.TRUST_ALLIED_THRESHOLD:
+            return "friendly"
+        else:
+            return "allied"
+
+    @staticmethod
+    def compute_opinions(game_state) -> dict:
+        """Derives short opinion tags for each character about every other character.
+        Returns {viewer: {target: "short opinion"}}."""
+        opinions = {}
+        for viewer in game_state.alive_characters:
+            opinions[viewer] = {}
+            if viewer not in game_state.trust_matrix:
+                continue
+            for target in game_state.alive_characters:
+                if target == viewer:
+                    continue
+                trust_score = game_state.trust_matrix[viewer].get(target, 50)
+                tier = TrustManager.get_trust_tier(trust_score)
+                base_opinion = TrustManager.TRUST_OPINIONS[tier]
+
+                # Find last interaction from target toward viewer in logical history
+                last_intent = None
+                for entry in reversed(game_state.logical_history):
+                    if entry.startswith(f"{target} ["):
+                        # Extract intent: "Name [intent] -> ..."
+                        try:
+                            intent = entry.split("[")[1].split("]")[0]
+                            entry_target = entry.split("-> ")[1].split(" ")[0]
+                            if entry_target == viewer:
+                                last_intent = intent
+                                break
+                        except (IndexError, ValueError):
+                            continue
+
+                modifier = TrustManager.INTENT_OPINION_MODIFIERS.get(last_intent)
+                if modifier:
+                    opinions[viewer][target] = f"{modifier}. {base_opinion}"
+                else:
+                    opinions[viewer][target] = base_opinion
+
+        return opinions
+
     @staticmethod
     def apply_global_trust_shift(game_state, target: str, shift: int):
         """Applies a trust shift from all alive NPCs towards a single target."""

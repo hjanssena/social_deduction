@@ -23,6 +23,11 @@ class GameState:
         self.public_events = [] 
         self.player_actions_today = 0
         self.killed_last_night = []
+        self.ga_protected_tonight = None
+        self.ga_protected_last_night = None
+        self.ga_protection_history = []  # ["Night 0: Protected Elias", ...]
+        self.coroner_knowledge = []
+        self.opinions = {}  # {viewer: {target: "short opinion"}} — computed at end of each day
         self.main_topic = "Victor's uncle has mysteriously disappeared. Someone in this room is responsible."
         
         # Add the Player to the alive roster implicitly
@@ -35,15 +40,27 @@ class GameState:
         }
         
         # --- Secret Role Assignment ---
-        self.roles = {name: "villager" for name in self.alive_characters}
-        
-        werewolf_count = config.get("setup", {}).get("werewolf_count", 1)
-        npc_names = [c.name for c in characters]
-        
-        # Randomly pick the werewolves from the NPCs
-        werewolves = random.sample(self.alive_characters, min(werewolf_count, len(self.alive_characters)))
-        for w in werewolves:
-            self.roles[w] = "werewolf"
+        self.roles = {}
+        setup = config.get("setup", {})
+        werewolf_count = setup.get("werewolf_count", 1)
+        ga_count = setup.get("guardian_angel_count", 0)
+        coroner_count = setup.get("coroner_count", 0)
+
+        pool = list(self.alive_characters)
+        random.shuffle(pool)
+
+        assigned = 0
+        for _ in range(min(werewolf_count, len(pool) - assigned)):
+            self.roles[pool[assigned]] = "werewolf"
+            assigned += 1
+        for _ in range(min(ga_count, len(pool) - assigned)):
+            self.roles[pool[assigned]] = "guardian_angel"
+            assigned += 1
+        for _ in range(min(coroner_count, len(pool) - assigned)):
+            self.roles[pool[assigned]] = "coroner"
+            assigned += 1
+        for i in range(assigned, len(pool)):
+            self.roles[pool[i]] = "villager"
 
     def check_win_condition(self) -> str | None:
         """Returns 'village_wins', 'werewolves_win', or None if the game continues."""
@@ -55,3 +72,6 @@ class GameState:
         if len(alive_werewolves) >= len(alive_villagers):
             return "werewolves_win"
         return None
+
+    def is_coroner_alive(self) -> bool:
+        return any(self.roles.get(name) == "coroner" for name in self.alive_characters)

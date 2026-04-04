@@ -27,7 +27,7 @@ class PlayerController:
         if not player_text.strip():
             return {"intent": "neutral", "target": "None", "summary": "Remained silent"}
 
-        roster_text = self.gm.get_roster_text()
+        roster_text = self.gm.get_roster_text(viewer="Player")
         system_prompt = self.gm.prompt_builder.build_intent_parser_prompt(
             player_text=player_text,
             alive_characters=self.gm.state.alive_characters,

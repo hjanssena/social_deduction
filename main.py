@@ -1,4 +1,4 @@
-from services.llm_service import LLMService
+from services.llm_factory import create_llm
 from services.prompt_service import PromptService
 from models.character import Character
 from core.game_master import GameMaster
@@ -141,14 +141,14 @@ def main():
         config = json.load(f)
 
     # 1. Initialize Services
-    llm = LLMService(model_path="./llms/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf", config=config)
+    llm = create_llm(config)
     prompt_builder = PromptService()
     
     # 2. Instantiate Models
     characters = [Character(f"npc_{c['name'].lower()}", c) for c in RAW_CHARACTER_DATA]
     
     # 3. Inject into GameMaster
-    gm = GameMaster(llm_service=llm, prompt_service=prompt_builder, characters=characters, config=config.get("discussion", {}))
+    gm = GameMaster(llm_service=llm, prompt_service=prompt_builder, characters=characters, config=config)
     
     gm.state.public_events.append("Last night, Victor's uncle mysteriously disappeared without a trace. Victor is the town Mayor.")
     # 4. Run Day 0 Logic

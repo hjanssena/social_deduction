@@ -155,13 +155,21 @@ class VotingPhase:
                 state.alive_characters.remove(lynched_char)
                 state.public_events.append(f"Day {state.day} Voting: {lynched_char} was lynched by the town.")
 
-                lynched_role = state.roles.get(lynched_char, "villager")
-                if lynched_role == "werewolf":
-                    io.display(f"\n\033[92m{lynched_char} was a WEREWOLF! The town got one right.\033[0m")
-                    state.public_events.append(f"Day {state.day}: {lynched_char} was revealed as a werewolf.")
-                else:
-                    io.display(f"\n\033[93m{lynched_char} was an innocent villager. The town has made a grave mistake.\033[0m")
-                    state.public_events.append(f"Day {state.day}: {lynched_char} was innocent. The real killer is still free.")
+                # No public role reveal — only the coroner learns the truth
+                state.public_events.append(f"Day {state.day}: {lynched_char} was lynched. Their true allegiance is unknown.")
+
+                if state.is_coroner_alive():
+                    lynched_role = state.roles.get(lynched_char, "villager")
+                    allegiance = "werewolf" if lynched_role == "werewolf" else "innocent"
+
+                    coroner_name = next(
+                        n for n in state.alive_characters if state.roles.get(n) == "coroner"
+                    )
+                    finding = f"Day {state.day}: {lynched_char} was {allegiance}"
+                    state.coroner_knowledge.append(finding)
+
+                    if coroner_name == "Player":
+                        io.display(f"\n\033[95m[CORONER INSIGHT] You examine the body: {lynched_char} was {allegiance.upper()}.\033[0m")
 
                 if lynched_char == "Player":
                     io.display("\n\033[91m[GAME OVER] You have been lynched by the town.\033[0m")

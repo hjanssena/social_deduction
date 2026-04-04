@@ -30,7 +30,7 @@ class DiscussionPhase:
                 p_input, speaker_multipliers, decay_factor, assertions_made
             )
 
-            if speaker_name:
+            if speaker_name and assertion_data:
                 self._handle_reactions(speaker_name, assertion_data, assertions_made)
 
             assertions_made += 1

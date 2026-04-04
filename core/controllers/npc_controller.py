@@ -56,17 +56,21 @@ class NPCController:
         char_obj = self.gm.characters[speaker_name]
         role = self.gm.state.roles.get(speaker_name, "villager")
         werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        system_prompt = self.gm.prompt_builder.build_system_prompt(char_obj, role, known_werewolves=werewolves)
-        
+        coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
+        ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
+        system_prompt = self.gm.prompt_builder.build_system_prompt(char_obj, role, known_werewolves=werewolves, coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history)
+
         relationship_text = TrustManager.get_all_relationships_prompt(speaker_name, self.gm.state)
         player_status = self.gm.player_controller.get_status(current_assertion)
-        roster_text = self.gm.get_roster_text()
-        
+        roster_text = self.gm.get_roster_text(viewer=speaker_name)
+
         main_topic = self.gm.state.main_topic
+        coroner_findings = " | ".join(self.gm.state.coroner_knowledge) if role == "coroner" and self.gm.state.coroner_knowledge else None
+        ga_log = " | ".join(self.gm.state.ga_protection_history) if role == "guardian_angel" and self.gm.state.ga_protection_history else None
 
         # --- PHASE 1: LOGIC ---
         logic_prompt = self.gm.prompt_builder.build_logic_prompt(
-            logical_history=self.gm.state.logical_history, # Uses Logic Track
+            logical_history=self.gm.state.logical_history,
             alive_characters=self.gm.state.alive_characters,
             public_events=self.gm.state.public_events,
             main_topic=main_topic,
@@ -74,7 +78,10 @@ class NPCController:
             window_size=self.gm.config.get("chat_history_window", 5),
             relationship_context=relationship_text,
             player_status=player_status,
-            roster_text=roster_text
+            roster_text=roster_text,
+            coroner_findings=coroner_findings,
+            secret_role=role,
+            ga_log=ga_log
         )
         
         logic_data = self.gm.llm.generate_json(system_prompt, logic_prompt)
@@ -89,7 +96,8 @@ class NPCController:
         emotion = logic_data.get("emotion", "neutral")
         reasoning = logic_data.get("reasoning", "No reason given.")
 
-        print(f"\n\033[90m[Brain ({speaker_name})]: {situation} {strategy} -> [{intent} {safe_target} ({emotion})]\033[0m")
+        if self.gm.debug.get("show_logic"):
+            self.gm.io.display(f"\n\033[90m[Brain ({speaker_name})]: {situation} {strategy} -> [{intent} {safe_target} ({emotion})]\033[0m")
 
         # Update Logic Track & Apply Trust
         self.gm.state.logical_history.append(f"{speaker_name} [{intent}] -> {safe_target} (Emotion: {emotion}). Reason: {reasoning}")
@@ -112,6 +120,9 @@ class NPCController:
         narrative_data = self.gm.llm.generate_json(system_prompt, narrative_prompt, use_narrative_cfg=True)
         raw_dialogue = narrative_data.get("dialogue", "... (Glares in silence)")
 
+        if self.gm.debug.get("show_narrative"):
+            self.gm.io.display(f"\033[90m[Narrative ({speaker_name})]: situation={narrative_data.get('situation_analysis', '')} | plan={narrative_data.get('intent_plan', '')}\033[0m")
+
         # Package it up to send back to GameMaster
         return {
             "dialogue": raw_dialogue,
@@ -125,13 +136,17 @@ class NPCController:
         reactor_obj = self.gm.characters[reactor_name]
         role = self.gm.state.roles.get(reactor_name, "villager")
         werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        system_prompt = self.gm.prompt_builder.build_system_prompt(reactor_obj, role, known_werewolves=werewolves)
-        
+        coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
+        ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
+        system_prompt = self.gm.prompt_builder.build_system_prompt(reactor_obj, role, known_werewolves=werewolves, coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history)
+
         # Build the Logical Event Context so the Brain knows what it's reacting to
         logical_event = f"{primary_speaker} [{assertion_data.get('intent')}] -> {assertion_data.get('target')} (Emotion: {assertion_data.get('emotion')})"
-        
+
         relationship_text = f"Regarding {primary_speaker}: " + TrustManager.get_relationship_prompt(self.gm.state.trust_matrix[reactor_name].get(primary_speaker, 50))
-        
+        coroner_findings = " | ".join(self.gm.state.coroner_knowledge) if role == "coroner" and self.gm.state.coroner_knowledge else None
+        ga_log = " | ".join(self.gm.state.ga_protection_history) if role == "guardian_angel" and self.gm.state.ga_protection_history else None
+
         # --- PHASE 1: LOGIC ---
         logic_prompt = self.gm.prompt_builder.build_logic_prompt(
             logical_history=self.gm.state.logical_history,
@@ -143,13 +158,17 @@ class NPCController:
             current_event=logical_event,
             relationship_context=relationship_text,
             player_status=self.gm.player_controller.get_status(current_assertion),
-            roster_text=self.gm.get_roster_text()
+            roster_text=self.gm.get_roster_text(viewer=reactor_name),
+            coroner_findings=coroner_findings,
+            secret_role=role,
+            ga_log=ga_log
         )
-        
+
         logic_data = self.gm.llm.generate_json(system_prompt, logic_prompt)
 
         if not logic_data:
-            print(f"\033[90m[Brain ({reactor_name})]: ... (no response)\033[0m")
+            if self.gm.debug.get("show_logic"):
+                self.gm.io.display(f"\033[90m[Brain ({reactor_name})]: ... (no response)\033[0m")
             return
 
         situation = logic_data.get("situation_analysis", "")
@@ -159,7 +178,8 @@ class NPCController:
         emotion = logic_data.get("emotion", "neutral")
         reasoning = logic_data.get("reasoning", "No reason given.")
 
-        print(f"\033[90m[Brain ({reactor_name})]: {situation} {strategy} -> [{intent} {safe_target} ({emotion})]\033[0m")
+        if self.gm.debug.get("show_logic"):
+            self.gm.io.display(f"\033[90m[Brain ({reactor_name})]: {situation} {strategy} -> [{intent} {safe_target} ({emotion})]\033[0m")
 
         # Update Logic Track & Apply Trust
         self.gm.state.logical_history.append(f"{reactor_name} [{intent}] -> {safe_target} (Emotion: {emotion}). Reason: {reasoning}")
@@ -177,16 +197,19 @@ class NPCController:
             chat_history=self.gm.state.chat_history,
             main_topic=self.gm.state.main_topic,
             public_events=self.gm.state.public_events,
-            roster_text=self.gm.get_roster_text(),
+            roster_text=self.gm.get_roster_text(viewer=reactor_name),
             character=reactor_obj
         )
 
         narrative_data = self.gm.llm.generate_json(system_prompt, narrative_prompt, use_narrative_cfg=True)
         raw_dialogue = narrative_data.get("dialogue", "... (Glares in silence)")
 
+        if self.gm.debug.get("show_narrative"):
+            self.gm.io.display(f"\033[90m[Narrative ({reactor_name})]: situation={narrative_data.get('situation_analysis', '')} | plan={narrative_data.get('intent_plan', '')}\033[0m")
+
         display_target = safe_target if safe_target != "None" else "Room"
         self.gm.state.chat_history.append(f"[{reactor_name} -> {display_target}]: {raw_dialogue}")
-        print(f"[{reactor_name} -> {display_target}]: {raw_dialogue}")
+        self.gm.io.display(f"[{reactor_name} -> {display_target}]: {raw_dialogue}")
 
     def generate_vote(self, voter_name: str) -> dict:
         """Quietly asks the LLM who this NPC wants to vote for."""
@@ -194,10 +217,12 @@ class NPCController:
         
         # --- GET PACK LIST ---
         werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        system_prompt = self.gm.prompt_builder.build_system_prompt(self.gm.characters[voter_name], secret_role=role, known_werewolves=werewolves)
+        coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
+        ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
+        system_prompt = self.gm.prompt_builder.build_system_prompt(self.gm.characters[voter_name], secret_role=role, known_werewolves=werewolves, coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history)
         
         relationship_text = TrustManager.get_all_relationships_prompt(voter_name, self.gm.state)
-        roster_text = self.gm.get_roster_text()
+        roster_text = self.gm.get_roster_text(viewer=voter_name)
         user_prompt = self.gm.prompt_builder.build_voting_prompt(
             character_name=voter_name,
             alive_characters=self.gm.state.alive_characters,
@@ -254,7 +279,9 @@ class NPCController:
         char_obj = self.gm.characters[character_name]
         role = self.gm.state.roles.get(character_name, "villager")
         werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        system_prompt = self.gm.prompt_builder.build_system_prompt(char_obj, role, known_werewolves=werewolves)
+        coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
+        ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
+        system_prompt = self.gm.prompt_builder.build_system_prompt(char_obj, role, known_werewolves=werewolves, coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history)
 
         user_prompt = self.gm.prompt_builder.build_final_words_prompt(
             character_name=character_name,
@@ -266,3 +293,28 @@ class NPCController:
 
         dialogue = self.gm.llm.generate_text(system_prompt, user_prompt)
         return dialogue if dialogue else "..."
+
+    def generate_protect_preference(self, ga_name: str, valid_targets: list[str]) -> dict:
+        """Asks the NPC Guardian Angel who to protect tonight."""
+        char_obj = self.gm.characters[ga_name]
+        system_prompt = self.gm.prompt_builder.build_system_prompt(char_obj, "guardian_angel")
+        relationship_text = TrustManager.get_all_relationships_prompt(ga_name, self.gm.state)
+
+        user_prompt = self.gm.prompt_builder.build_ga_night_prompt(
+            character_name=ga_name,
+            valid_targets=valid_targets,
+            last_protected=self.gm.state.ga_protected_last_night,
+            logical_history=self.gm.state.logical_history,
+            relationship_context=relationship_text
+        )
+
+        action_data = self.gm.llm.generate_json(system_prompt, user_prompt)
+
+        if action_data:
+            safe_target = self.gm.sanitize_target(action_data.get("target", "None"))
+            if safe_target not in valid_targets:
+                safe_target = random.choice(valid_targets) if valid_targets else "None"
+            action_data["target"] = safe_target
+            return action_data
+
+        return {"thought_process": "I must protect someone.", "target": random.choice(valid_targets) if valid_targets else "None"}
