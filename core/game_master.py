@@ -1,6 +1,7 @@
 from core.controllers.npc_controller import NPCController
 from core.controllers.player_controller import PlayerController
 from core.game_state import GameState, GamePhase
+from core.stat_engine import StatEngine
 from core.io_handler import IOHandler
 from core.phases import ProloguePhase, DiscussionPhase, VotingPhase, NightPhase
 
@@ -16,6 +17,7 @@ class GameMaster:
         self.state = GameState(characters, config)
 
         # Sub-systems
+        self.stat_engine = StatEngine(self.state, self.characters, config.get("engine", {}))
         self.player_controller = PlayerController(self)
         self.npc_controller = NPCController(self)
 
@@ -60,6 +62,61 @@ class GameMaster:
                     entry += f" ({opinion})"
             roster.append(entry)
         return "\n".join(roster)
+
+    def get_claims_text(self) -> str:
+        """Builds a summary of all public role claims and their outcomes."""
+        state = self.state
+        if not state.revealed_roles:
+            return ""
+
+        ROLE_LABELS = {"guardian_angel": "Guardian Angel", "coroner": "Coroner"}
+        lines = []
+        for name, claimed_role in state.revealed_roles.items():
+            label = ROLE_LABELS.get(claimed_role, claimed_role)
+            alive = "alive" if name in state.alive_characters else "dead"
+
+            # Check if coroner has verified this person
+            verification = None
+            for finding in state.coroner_knowledge:
+                if name in finding:
+                    if "werewolf" in finding:
+                        verification = "confirmed werewolf by coroner"
+                    elif "innocent" in finding:
+                        verification = "confirmed innocent by coroner"
+
+            entry = f"- {name} claimed {label} ({alive})"
+            if verification:
+                entry += f" [{verification}]"
+            lines.append(entry)
+
+        return "\n".join(lines)
+
+    def condense_day_history(self):
+        """At the start of a new day, condense the previous day's chat_history into a summary.
+        Replaces old entries with the condensed version at the start of the list."""
+        state = self.state
+        if not state.chat_history:
+            return
+
+        # Build condensation prompt
+        history_text = "\n".join(state.chat_history)
+        system = "You are a concise game narrator. Summarize the key events and accusations."
+        prompt = (
+            f"Summarize Day {state.day - 1}'s discussion into 3-5 bullet points.\n"
+            f"Focus on: who accused whom, who defended whom, any role reveals, and the overall mood.\n"
+            f"Use exact character names. Be factual and brief.\n\n"
+            f"Discussion:\n{history_text}\n\n"
+            f"Respond with ONLY a JSON object:\n"
+            f'{{"summary": "<3-5 bullet point summary>"}}'
+        )
+
+        result = self.llm.generate_json(system, prompt)
+        summary = result.get("summary", "") if result else ""
+
+        if summary:
+            # Replace old history with condensed version
+            state.chat_history = [f"[Summary of Day {state.day - 1}]: {summary}"]
+        # If condensation fails, keep the raw history (better than losing it)
 
     def sanitize_target(self, target: str) -> str:
         """Ensures the target is a valid character name. Catches LLM occupation hallucinations."""

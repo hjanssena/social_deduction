@@ -15,13 +15,13 @@ class LLMService(LLMBase):
 
     def _initialize_with_fallback(self, model_path: str, chat_format: str):
         configs = [
-            {"n_gpu_layers": 45, "n_ctx": 2048},
-            {"n_gpu_layers": 40, "n_ctx": 2048},
-            {"n_gpu_layers": 35, "n_ctx": 2048},
-            {"n_gpu_layers": 30, "n_ctx": 2048},
-            {"n_gpu_layers": 25, "n_ctx": 1536},
-            {"n_gpu_layers": 20, "n_ctx": 1536},
-            {"n_gpu_layers": 15, "n_ctx": 1536},
+            {"n_gpu_layers": 50, "n_ctx": 1536},
+            {"n_gpu_layers": 45, "n_ctx": 1536},
+            {"n_gpu_layers": 40, "n_ctx": 1536},
+            {"n_gpu_layers": 35, "n_ctx": 1536},
+            {"n_gpu_layers": 30, "n_ctx": 1024},
+            {"n_gpu_layers": 25, "n_ctx": 1024},
+            {"n_gpu_layers": 20, "n_ctx": 1024},
             {"n_gpu_layers": 15, "n_ctx": 1024},
             {"n_gpu_layers": 0,  "n_ctx": 1024},
         ]
@@ -58,7 +58,7 @@ class LLMService(LLMBase):
             "min_p": cfg.get("min_p", 0.05),
             "top_k": cfg.get("top_k", 40),
             "repeat_penalty": cfg.get("repeat_penalty", 1.05),
-            "max_tokens": 512,
+            "max_tokens": 200,
         }
 
         if json_mode:

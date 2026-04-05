@@ -1,16 +1,14 @@
-import threading
 import time
 from collections import Counter
 
 from core.game_state import GamePhase
 from core.trust_manager import TrustManager
 
-VOTE_TIMEOUT_SECONDS = 300
 REVEAL_PAUSE_SECONDS = 1.5
 
 
 class VotingPhase:
-    """Collects player and NPC votes in parallel, tallies, and executes the lynch."""
+    """Collects player and NPC votes, tallies, and executes the lynch."""
 
     def __init__(self, gm):
         self.gm = gm
@@ -20,24 +18,13 @@ class VotingPhase:
         io = gm.io
         state = gm.state
 
-        npc_voters = [name for name in state.alive_characters if name != "Player"]
-        npc_vote_results = {}
-
-        # Collect NPC votes in background while player decides
-        def process_npc_votes():
-            for npc in npc_voters:
-                npc_vote_results[npc] = gm.npc_controller.generate_vote(npc)
-
-        vote_thread = threading.Thread(target=process_npc_votes)
-        vote_thread.start()
-
         player_vote = gm.player_controller.get_vote()
 
-        io.display("\n\033[90m[System] You cast your vote. Waiting for the town to finalize their decisions...\033[0m")
-
-        vote_thread.join(timeout=VOTE_TIMEOUT_SECONDS)
-        if vote_thread.is_alive():
-            io.display("\033[91m[System] NPC voting timed out. Using available votes only.\033[0m")
+        # NPC votes are instant (stat engine, no LLM)
+        npc_voters = [name for name in state.alive_characters if name != "Player"]
+        npc_vote_results = {}
+        for npc in npc_voters:
+            npc_vote_results[npc] = gm.npc_controller.generate_vote(npc)
 
         # Reveal
         io.display("\n\033[36m" + "="*50)
@@ -167,6 +154,7 @@ class VotingPhase:
                     )
                     finding = f"Day {state.day}: {lynched_char} was {allegiance}"
                     state.coroner_knowledge.append(finding)
+                    gm.stat_engine.process_coroner_findings(finding)
 
                     if coroner_name == "Player":
                         io.display(f"\n\033[95m[CORONER INSIGHT] You examine the body: {lynched_char} was {allegiance.upper()}.\033[0m")

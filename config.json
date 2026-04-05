@@ -1,40 +1,161 @@
 {
     "setup": {
+        "_docs": "Game setup: how many of each special role to include.",
         "werewolf_count": 2,
         "guardian_angel_count": 1,
         "coroner_count": 1
     },
     "discussion": {
+        "_docs": "Controls the discussion phase loop. decay_factor: multiplier applied to a speaker's bid weight each time they speak (lower = less likely to speak again soon). max_assertions_per_day: total assertion slots per day. speaker_weight_decay: unused legacy key. chat_history_window: how many recent chat lines the LLM prompts receive. player_min_actions: minimum player actions before silence penalty triggers. player_max_actions: maximum player actions before domination penalty triggers. global_trust_penalty: flat trust penalty applied to the player for being too quiet. silence_under_fire_penalty: trust penalty when the player refuses to defend against a direct accusation.",
         "decay_factor": 0.2,
         "max_assertions_per_day": 8,
         "speaker_weight_decay": 0.25,
-        "chat_history_window": 6,
+        "chat_history_window": 5,
         "player_min_actions": 2,
         "player_max_actions": 7,
         "global_trust_penalty": 5,
         "silence_under_fire_penalty": 10
     },
+    "engine": {
+        "_docs": "All parameters for the deterministic StatEngine. Organized by subsystem.",
+        "suspicion": {
+            "_docs": "Suspicion matrix update deltas. Each [lo, hi] pair is a randint range scaled by an observer stat. deflect_when_accused: delta when someone deflects instead of answering (scaled by intuition). silence: delta for prolonged silence (scaled by intuition). contradiction: delta when someone contradicts a prior action (scaled by intuition). accused_cleared_innocent: delta when someone accused a coroner-cleared innocent (scaled by logic_vs_emotion). defended_guilty: delta when someone defended a character later revealed guilty (scaled by logic_vs_emotion). ally_defends: suspicion REDUCTION when a trusted ally defends the target. ga_protected: suspicion REDUCTION when GA protection log matches the target. duplicate_claim: delta applied to BOTH claimants when two characters claim the same role (scaled by intuition). intuition_divisor: observer's intuition is divided by this to get the scaling multiplier. logic_emotion_divisor: observer's logic_vs_emotion is divided by this to get the scaling multiplier.",
+            "deflect_when_accused": [
+                8,
+                15
+            ],
+            "silence": [
+                5,
+                10
+            ],
+            "contradiction": [
+                10,
+                20
+            ],
+            "accused_cleared_innocent": [
+                5,
+                12
+            ],
+            "defended_guilty": [
+                10,
+                18
+            ],
+            "ally_defends": [
+                5,
+                10
+            ],
+            "ga_protected": [
+                10,
+                15
+            ],
+            "duplicate_claim": [
+                15,
+                25
+            ],
+            "intuition_divisor": 5.0,
+            "logic_emotion_divisor": 5.0
+        },
+        "kill": {
+            "_docs": "Werewolf night kill target selection. intuition_weight: multiplier for target's intuition stat when scoring threat (high intuition = can detect wolves). default_threat_score: fallback threat score when character data is missing. revealed_role_bonus: extra threat score added for characters who have publicly claimed GA or Coroner (high-value targets for wolves to eliminate).",
+            "intuition_weight": 6,
+            "default_threat_score": 50,
+            "revealed_role_bonus": 80
+        },
+        "protect": {
+            "_docs": "Guardian Angel night protection target selection. intuition_weight: multiplier for target's intuition stat when scoring protection priority. default_threat_level: fallback threat level when character data is missing. revealed_role_bonus: extra priority score for protecting characters who have publicly claimed a special role (wolves will target them).",
+            "intuition_weight": 5,
+            "default_threat_level": 25,
+            "revealed_role_bonus": 60
+        },
+        "assertion": {
+            "_docs": "Controls how villagers pick assertion intents. accuse_base_weight: base probability weight for accusing. accuse_low_logic_bonus: extra accuse weight when logic_vs_emotion is below low_logic_threshold (emotional characters accuse more). low_logic_threshold: logic_vs_emotion at or below this is considered 'emotional'. question_base_weight: base probability weight for questioning. question_high_logic_bonus: extra question weight when logic_vs_emotion is at or above high_logic_threshold (logical characters question more). high_logic_threshold: logic_vs_emotion at or above this is considered 'logical'. neutral_min_weight: minimum probability weight for neutral assertions. low_ad_threshold: assertion_drive at or below this is considered 'passive'. low_ad_neutral_bonus: extra neutral weight for passive characters. suspicion_target_threshold: minimum suspicion score before a target is considered for accusation/questioning.",
+            "accuse_base_weight": 55,
+            "accuse_low_logic_bonus": 15,
+            "low_logic_threshold": 4,
+            "question_base_weight": 30,
+            "question_high_logic_bonus": 10,
+            "high_logic_threshold": 7,
+            "neutral_min_weight": 5,
+            "low_ad_threshold": 4,
+            "low_ad_neutral_bonus": 30,
+            "suspicion_target_threshold": 10
+        },
+        "werewolf": {
+            "_docs": "Werewolf-specific decision tuning. packmate_defense_divisor: performance/this = chance to defend a packmate (higher = less likely). deflect_performance_threshold: minimum performance to deflect instead of defend_self when accused. reaction_deflect_threshold: minimum performance to deflect in reactions (vs defend_self). reaction_packmate_defense_divisor: performance/this = chance to defend packmate in reactions. reaction_bandwagon_chance: probability of agreeing when an innocent is being accused (pile-on). fake_suspicion_innocent_weight: voting weight for innocents when faking suspicion scores. fake_suspicion_wolf_weight: voting weight for fellow wolves when faking suspicion scores (low = protect pack). voluntary_reveal_performance_threshold: minimum performance to attempt a voluntary fake role claim. voluntary_reveal_chance: probability of a qualifying wolf actually making the fake claim.",
+            "packmate_defense_divisor": 10,
+            "deflect_performance_threshold": 5,
+            "reaction_deflect_threshold": 6,
+            "reaction_packmate_defense_divisor": 12,
+            "reaction_bandwagon_chance": 0.4,
+            "fake_suspicion_innocent_weight": 80,
+            "fake_suspicion_wolf_weight": 5,
+            "voluntary_reveal_performance_threshold": 7,
+            "voluntary_reveal_chance": 0.05
+        },
+        "reaction": {
+            "_docs": "Controls how NPCs decide to react to assertions. disagree_suspicion_threshold: minimum suspicion toward a target before disagreeing with their defender. agree_suspicion_threshold: minimum suspicion toward the accused before agreeing with the accuser. agree_cold_start_trust_threshold: if trust toward the accused is below this, the reactor may agree even without suspicion data. agree_cold_start_chance: probability of cold-start agreement triggering. agree_general_trust_threshold: minimum trust toward the speaker to agree with non-accusation statements. agree_general_chance: probability of general agreement triggering. defend_other_friendly_chance: probability of defending a 'friendly' (55+ trust) ally when they're attacked (allied 75+ always defends).",
+            "disagree_suspicion_threshold": 40,
+            "agree_suspicion_threshold": 10,
+            "agree_cold_start_trust_threshold": 40,
+            "agree_cold_start_chance": 0.4,
+            "agree_general_trust_threshold": 60,
+            "agree_general_chance": 0.25,
+            "defend_other_friendly_chance": 0.6
+        },
+        "contrarian": {
+            "_docs": "Controls the contrarian disagreement roll. index_divisor: contrarian_index/this = base chance to disagree. trust_center: trust values above this reduce contrarian chance. trust_divisor: how much trust above center reduces the chance (higher = less reduction).",
+            "index_divisor": 10.0,
+            "trust_center": 50,
+            "trust_divisor": 100
+        },
+        "emotion": {
+            "_docs": "Emotion derivation. logic_threshold: logic_vs_emotion at or below this uses the 'emotional' pool; above uses the 'logical' pool.",
+            "logic_threshold": 5
+        },
+        "history_window": 3,
+        "_docs_history_window": "How many recent logical_history entries to scan when checking if someone is under attack.",
+        "ally_defense": {
+            "_docs": "Controls probabilistic ally defense for 'friendly' trust tier (55-74). friendly_probability_divisor: (trust - friendly_threshold) / this = bonus defend chance. friendly_base_chance: base probability added to the bonus chance.",
+            "friendly_probability_divisor": 40,
+            "friendly_base_chance": 0.2
+        },
+        "reveal": {
+            "_docs": "Controls role reveal decisions. Checked for ALL alive NPCs between every assertion round (not gated by speaker bids), so probabilities are per-round. pressure_base_chance: per-round probability for a real role holder to counter-reveal when someone claims their role. pressure_ad_divisor: assertion_drive/this is added to the base chance. wolf_pressure_performance_threshold: minimum performance for a wolf to consider counter-claiming under pressure. wolf_pressure_chance_divisor: performance/this = per-round wolf counter-claim probability. ga_voluntary_chance: per-round probability the GA reveals voluntarily when under attack and has protection history. coroner_wolf_finding_chance: per-round probability the coroner reveals when they have werewolf findings. coroner_no_wolf_chance: per-round probability the coroner reveals when they only have non-wolf findings. coroner_under_attack_bonus: added to reveal chance when the coroner is being accused.",
+            "pressure_base_chance": 0.3,
+            "pressure_ad_divisor": 100,
+            "wolf_pressure_performance_threshold": 6,
+            "wolf_pressure_chance_divisor": 30,
+            "ga_voluntary_chance": 0.1,
+            "coroner_wolf_finding_chance": 0.08,
+            "coroner_no_wolf_chance": 0.03,
+            "coroner_under_attack_bonus": 0.1
+        }
+    },
     "debug": {
+        "_docs": "Debug display toggles. show_logic: print engine decisions (intent, target, emotion, reasoning) in yellow/gray. show_narrative: print weaver analysis (situation, motivation) before the actor dialogue.",
         "show_logic": true,
         "show_narrative": true
     },
     "llm": {
+        "_docs": "LLM backend configuration. backend: 'llamacpp' for local GGUF or 'ollama' for Ollama API. model_path: path to GGUF file (llamacpp only). chat_format: tokenizer chat template (llamacpp only). model: model name for Ollama. ollama_url: Ollama API endpoint.",
         "backend": "llamacpp",
         "model_path": "./llms/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
-        "chat_format": "auto",
+        "chat_format": "chatml",
         "model": "qwen3.5:cloud",
         "ollama_url": "http://localhost:11434",
         "logic": {
+            "_docs": "Sampling parameters for engine/weaver LLM calls (analytical, low creativity). temperature: randomness (low = deterministic). min_p: minimum probability threshold. top_k: consider only top K tokens. repeat_penalty: penalizes token repetition.",
             "temperature": 0.1,
             "min_p": 0.05,
             "top_k": 40,
-            "repeat_penalty": 1.1
+            "repeat_penalty": 1.05
         },
         "narrative": {
-            "temperature": 0.4,
-            "min_p": 0.05,
+            "_docs": "Sampling parameters for actor LLM calls (creative, expressive dialogue). temperature: randomness (higher = more varied). min_p: minimum probability threshold. top_k: consider only top K tokens. repeat_penalty: penalizes token repetition.",
+            "temperature": 0.8,
+            "min_p": 0.01,
             "top_k": 40,
-            "repeat_penalty": 1.1
+            "repeat_penalty": 1.15
         }
     }
 }

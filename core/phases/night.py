@@ -44,9 +44,10 @@ class NightPhase:
 
         # --- Protection Check ---
         if killed_target and killed_target == protected_target:
-            io.display(f"\n\033[92m[System] A guardian presence watched over {killed_target} in the night. They survived!\033[0m")
-            state.public_events.append(f"Night {state.day}: {killed_target} was attacked but miraculously survived.")
-            state.main_topic = f"{killed_target} was attacked last night but survived. Someone is protecting them."
+            # GA saved someone — the village only knows nobody died (no public reveal)
+            io.display("\n\033[92m[System] The morning sun rises. Miraculously, everyone survived the night.\033[0m")
+            state.public_events.append(f"Night {state.day}: No one was killed.")
+            state.main_topic = "No one died last night, but the killer is still out there."
             state.killed_last_night = []
         else:
             self._execute_kill(killed_target)
@@ -89,11 +90,8 @@ class NightPhase:
         if npc_wolves:
             io.display("\033[90m[System] Your fellow werewolves whisper their desires in the dark...\033[0m")
             for npc in npc_wolves:
-                pref = gm.npc_controller.generate_kill_preference(npc, alive_villagers)
-                io.display(
-                    f"\033[91m[{npc} (Whisper)]: {pref['thought_process']} "
-                    f"-> (Wants to kill {pref['target']})\033[0m"
-                )
+                whisper = gm.npc_controller.generate_wolf_whisper(npc, alive_villagers)
+                io.display(f"\033[91m[{npc} (Whisper)]: {whisper['dialogue']}\033[0m")
         else:
             io.display("\033[91m[System] You are the lone werewolf. The choice is yours entirely.\033[0m")
 

@@ -16,3 +16,5 @@ class Character:
         self.contrarian_index = stats.get("contrarian_index", 5)
         self.trust_volatility = stats.get("trust_volatility", 5)
         self.logic_vs_emotion = stats.get("logic_vs_emotion", 5)
+        self.performance = stats.get("performance", 5)
+        self.intuition = stats.get("intuition", 5)

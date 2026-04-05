@@ -54,101 +54,228 @@ class PromptService:
         return prompt
 
     @staticmethod
-    def build_logic_prompt(logical_history: list[str], alive_characters: list[str], public_events: list[str], main_topic: str, speaker_name: str, window_size: int, current_event: str = None, relationship_context: str = None, player_status: str = None, roster_text: str = None, coroner_findings: str = None, secret_role: str = "villager", ga_log: str = None) -> str:
-        """Phase 1: The Brain. Outputs a JSON intent decision. Kept compact for 7-11B models."""
-        # Trim history windows aggressively — small models lose earlier entries anyway
-        recent_history = logical_history[-min(window_size, 5):] if logical_history else []
-        history_text = "\n".join(recent_history) if recent_history else "None."
-        events_text = " | ".join(public_events[-3:]) if public_events else "None."
-
-        prompt = f"Focus: {main_topic}\n"
-        prompt += f"Events: {events_text}\n"
-
-        if roster_text:
-            prompt += f"Alive:\n{roster_text}\n"
-        if relationship_context:
-            prompt += f"Feelings: {relationship_context}\n"
-        if coroner_findings:
-            prompt += f"Your coroner findings: {coroner_findings}\n"
-        if ga_log:
-            prompt += f"Your protection log: {ga_log}\n"
-
-        prompt += f"\nRecent Actions:\n{history_text}\n\n"
-
-        # Rules — kept to 4 max so small models retain them
-        prompt += "Rules:\n"
-        prompt += "1. Base your decision on your Feelings and Recent Actions.\n"
-        prompt += "2. Never defend someone you accused or accuse someone you defended.\n"
-        prompt += "3. Do not repeat your last intent+target combo. Vary your actions.\n"
-        prompt += f"4. You are {speaker_name}. Stay in character.\n"
-
-        if secret_role == "werewolf":
-            prompt += "STRATEGY: You are the WEREWOLF. Deflect suspicion from yourself. Accuse innocents who are onto you. Defend your pack. Never reveal yourself.\n"
-        elif secret_role == "guardian_angel":
-            prompt += "STRATEGY: You are the GUARDIAN ANGEL. Help find the werewolf. Consider revealing your role only if it saves an innocent.\n"
-        elif secret_role == "coroner":
-            prompt += "STRATEGY: You are the CORONER. Use your findings to steer the town toward the truth.\n"
-
-        if player_status == "dominating":
-            prompt += "ALERT: Player is dominating the conversation. Consider confronting them.\n"
-        elif player_status == "silent":
-            prompt += "ALERT: Player is suspiciously silent. Consider questioning them.\n"
-
-        if current_event:
-            prompt += f"\nReact to: {current_event}\n"
-        else:
-            prompt += "\nIt is your turn. Choose your action.\n"
-
-        valid_targets = [c for c in alive_characters if c != speaker_name]
-
-        prompt += f"\nValid Targets: {', '.join(valid_targets)}, None\n"
-        prompt += f"Valid Intents: {VALID_INTENTS}\n"
-        prompt += f"Valid Emotions: {VALID_EMOTIONS}\n\n"
-        prompt += "Respond with ONLY a JSON object:\n"
-        prompt += "{\n"
-        prompt += '  "situation_analysis": "<1 sentence: What just happened and who is involved?>",\n'
-        if secret_role == "werewolf":
-            prompt += '  "strategic_thought": "<1 sentence: How do I deflect suspicion and frame someone?>",\n'
-        else:
-            prompt += '  "strategic_thought": "<1 sentence: Given my role and feelings, what should I do?>",\n'
-        prompt += f'  "intent": "<one of: {VALID_INTENTS}>",\n'
-        prompt += '  "target": "<exact name from Valid Targets or None>",\n'
-        prompt += f'  "emotion": "<one of: {VALID_EMOTIONS}>",\n'
-        prompt += '  "reasoning": "<5-8 word summary of why>"\n'
-        prompt += "}"
-        return prompt
-
-    @staticmethod
-    def build_narrative_prompt(speaker_name: str, intent: str, target: str, emotion: str, reasoning: str, chat_history: list[str], main_topic: str, public_events: list[str], roster_text: str, character=None) -> str:
-        """Phase 2: The Mouth. Converts logic output into one line of in-character dialogue."""
-        recent_history = chat_history[-4:] if chat_history else []
+    def build_weaver_prompt(speaker_name: str, occupation: str, intent: str, target: str,
+                            engine_reasoning: str, chat_history: list[str], main_topic: str,
+                            public_events: list[str], roster_text: str,
+                            claims_text: str = "") -> str:
+        """Context Weaver: bridges engine math into narrative motivation. No dialogue."""
+        recent_history = chat_history[-6:] if chat_history else []
         history_text = "\n".join(recent_history) if recent_history else "(silence)"
         events_text = " | ".join(public_events[-3:]) if public_events else "None."
 
         prompt = f"Setting: {main_topic}\n"
         prompt += f"Events: {events_text}\n"
-        prompt += f"Roster: {roster_text}\n\n"
+        if claims_text:
+            prompt += f"Role claims:\n{claims_text}\n"
+        prompt += f"Roster:\n{roster_text}\n\n"
         prompt += f"Recent conversation:\n{history_text}\n\n"
 
-        prompt += f"DIRECTIVE: You are {speaker_name}, feeling {emotion.upper()}. "
-        prompt += f"Your goal is to [{intent.upper()}] targeting [{target.upper()}] because: {reasoning}.\n"
-        prompt += "Your dialogue MUST clearly express this intent.\n\n"
+        prompt += "ENGINE DIRECTIVE:\n"
+        prompt += f"  Speaker: {speaker_name} ({occupation})\n"
+        prompt += f"  Action: {speaker_name} will {intent.replace('_', ' ')} {target}\n"
+        prompt += f"  Reasoning: {engine_reasoning}\n\n"
 
-        prompt += "Rules:\n"
-        prompt += "1. Write EXACTLY one line of spoken dialogue. No actions, no prose.\n"
-        prompt += "2. Do not prefix with your name. Do not announce your job title.\n"
+        prompt += f"Your job: As a THIRD-PERSON ANALYST (not the character), explain WHY {speaker_name} is doing this action.\n"
+        prompt += "Write about the character, not as the character. Use ONLY proper character names. No pronouns like 'you' or 'they'.\n"
+        prompt += "Do NOT write dialogue. Do NOT roleplay.\n"
+        prompt += "NEVER mention secret roles (werewolf, guardian angel, coroner, villager) in your analysis.\n"
+        prompt += "NEVER use engine action names like NEUTRAL-ing, ACCUSE-ing, AGREE-ing etc. Use natural language.\n\n"
 
+        prompt += f"""Respond with ONLY a JSON object:
+{{
+  "situation_analysis": "<1-2 sentences: What just happened in the conversation that connects to {speaker_name}'s action?>",
+  "narrative_motivation": "<1-2 sentences: Why {speaker_name} specifically targets {target} right now, grounded in recent events and {speaker_name}'s personality>"
+}}"""
+        return prompt
+
+    @staticmethod
+    def build_reaction_weaver_prompt(reactor_name: str, reactor_occupation: str,
+                                     intent: str, target: str, engine_reasoning: str, intensity: str,
+                                     speaker_name: str, speaker_dialogue: str, speaker_intent: str,
+                                     chat_history: list[str], main_topic: str,
+                                     public_events: list[str], roster_text: str,
+                                     prev_reaction: dict = None,
+                                     claims_text: str = "") -> str:
+        """Reaction Weaver: isolates the claim being reacted to, bridges engine into narrative.
+
+        Args:
+            prev_reaction: If set, dict with {speaker, dialogue, intent} of the most recent
+                           reaction in the chain. The weaver should reference BOTH the original
+                           assertion (primary) and this previous reaction (secondary).
+        """
+        recent_history = chat_history[-6:] if chat_history else []
+        history_text = "\n".join(recent_history) if recent_history else "(silence)"
+        events_text = " | ".join(public_events[-3:]) if public_events else "None."
+
+        prompt = f"Setting: {main_topic}\n"
+        prompt += f"Events: {events_text}\n"
+        if claims_text:
+            prompt += f"Role claims:\n{claims_text}\n"
+        prompt += f"Roster:\n{roster_text}\n\n"
+        prompt += f"Recent conversation:\n{history_text}\n\n"
+
+        prompt += "THE MAIN ASSERTION (this is what started the discussion):\n"
+        prompt += f"  [{speaker_name}]: {speaker_dialogue}\n\n"
+
+        if prev_reaction:
+            prev_name = prev_reaction["speaker"]
+            prev_dialogue = prev_reaction["dialogue"]
+            prompt += "THE MOST RECENT REACTION (what was just said):\n"
+            prompt += f"  [{prev_name}]: {prev_dialogue}\n\n"
+
+        prompt += "ENGINE DIRECTIVE:\n"
+        prompt += f"  Reactor: {reactor_name} ({reactor_occupation})\n"
+        prompt += f"  Action: {reactor_name} will {intent.replace('_', ' ')} {target}\n"
+        prompt += f"  Reasoning: {engine_reasoning}\n"
+        prompt += f"  Intensity: {intensity}\n\n"
+
+        prompt += f"Your job: As a THIRD-PERSON ANALYST (not the character), explain WHY {reactor_name} reacts this way.\n"
+        prompt += f"Focus primarily on {speaker_name}'s main assertion."
+        if prev_reaction:
+            prompt += f" Also consider {prev_reaction['speaker']}'s recent reaction as secondary context."
+        prompt += "\n"
+        prompt += "Write about the character, not as the character. Use ONLY proper character names. No pronouns.\n"
+        prompt += "Do NOT write dialogue. Do NOT roleplay.\n"
+        prompt += "NEVER mention secret roles (werewolf, guardian angel, coroner, villager) in your analysis.\n"
+        prompt += "NEVER use engine action names like NEUTRAL-ing, ACCUSE-ing, AGREE-ing etc. Use natural language.\n\n"
+
+        prompt += f"""Respond with ONLY a JSON object:
+{{
+  "core_claim": "<1 sentence: What exactly did {speaker_name} claim or assert?>",
+  "situation_analysis": "<1 sentence: How does {reactor_name}'s personality shape this response?>",
+  "narrative_motivation": "<1-2 sentences: Why {reactor_name} reacts to {speaker_name}'s claim this way, grounded in personality and recent events>"
+}}"""
+        return prompt
+
+    @staticmethod
+    def build_actor_prompt(character_name: str, emotion: str, narrative_motivation: str,
+                           chat_history: list[str], roster_text: str, character=None,
+                           intent: str = "neutral", target: str = "None",
+                           claims_text: str = "", main_topic: str = "") -> str:
+        """The Actor: pure roleplay for assertions. Transforms motivation into spoken dialogue.
+
+        chat_history should contain only assertions (no reactions) for this day.
+        """
+        recent_history = chat_history[-4:] if chat_history else []
+        history_text = "\n".join(recent_history) if recent_history else "(silence)"
+
+        # --- CONTEXT BLOCK (top — can fade) ---
+        prompt = ""
         if character:
-            prompt += f"3. Voice: {character.speech_pattern} {character.verbal_quirks}\n"
-        else:
-            prompt += f"3. Express {emotion} strongly through your words.\n"
+            prompt += f"You are {character_name}, the {character.occupation}. {character.bio}\n"
+            prompt += f"Personality: {character.archetype}\n"
+            prompt += f"Speech style: {character.speech_pattern}\n"
+            prompt += f"Style inspiration (do NOT copy word-for-word): {character.verbal_quirks}\n\n"
 
-        prompt += "\nYou MUST respond with ONLY a valid JSON object:\n"
-        prompt += "{\n"
-        prompt += '  "situation_analysis": "<1 sentence: What was just said?>",\n'
-        prompt += f'  "intent_plan": "<1 sentence: How will I [{intent.upper()}] {target} in my own voice?>",\n'
-        prompt += f'  "dialogue": "<Your one line of spoken dialogue that {intent.upper()}S {target}>"\n'
-        prompt += "}\n"
+        if main_topic:
+            prompt += f"Today's discussion topic: {main_topic}\n"
+        prompt += f"Roster:\n{roster_text}\n"
+        if claims_text:
+            prompt += f"Role claims:\n{claims_text}\n"
+        prompt += f"\nRecent assertions:\n{history_text}\n\n"
+
+        # --- DIRECTIVE BLOCK (bottom — strongest recall) ---
+        ACTION_DESCRIPTIONS = {
+            "accuse": f"{character_name} accuses {{target}} — blames {{target}} directly",
+            "defend_other": f"{character_name} defends {{target}} — tells the room to leave {{target}} alone",
+            "defend_self": f"{character_name} defends {character_name} — denies accusations against {character_name}",
+            "agree": f"{character_name} agrees with {{target}} — supports what {{target}} said",
+            "disagree": f"{character_name} disagrees with {{target}} — argues against {{target}}'s point",
+            "question": f"{character_name} questions {{target}} — demands {{target}} explain",
+            "deflect": f"{character_name} deflects — changes the subject away from {character_name}",
+            "neutral": f"{character_name} observes — makes a general comment about the situation",
+        }
+        action_desc = ACTION_DESCRIPTIONS.get(intent, f"{character_name} speaks").format(target=target)
+
+        prompt += "=== YOUR DIRECTIVE (you MUST follow this exactly) ===\n"
+        prompt += f"Action: {action_desc}\n"
+        prompt += f"Emotion: {emotion}\n"
+        prompt += f"Motivation: {narrative_motivation}\n\n"
+
+        prompt += "Write 1-3 sentences of spoken dialogue. No actions, no prose, no narration.\n"
+        prompt += "Your dialogue must relate to today's discussion topic.\n"
+
+        targeted_intents = {"accuse", "defend_other", "agree", "disagree", "question"}
+        if intent in targeted_intents and target and target != "None":
+            prompt += f"You MUST name {target} in your dialogue. NEVER use pronouns — always use character names.\n"
+        elif intent in ("neutral", "deflect"):
+            prompt += "Do NOT accuse or blame anyone specific. NEVER use pronouns — always use character names.\n"
+        else:
+            prompt += "NEVER use pronouns — always use character names.\n"
+
+        prompt += "Your dialogue MUST match the action above. Do NOT contradict it.\n"
+        prompt += "Do NOT repeat or paraphrase what others already said.\n\n"
+
+        prompt += 'Respond with ONLY a JSON object:\n'
+        prompt += '{"dialogue": "<Your 1-3 sentences of spoken dialogue>"}\n'
+
+        return prompt
+
+    @staticmethod
+    def build_reaction_actor_prompt(character_name: str, emotion: str,
+                                     narrative_motivation: str, intent: str, target: str,
+                                     assertion_speaker: str, assertion_dialogue: str,
+                                     reaction_chain: list[dict], main_topic: str,
+                                     character=None, claims_text: str = "") -> str:
+        """Reaction actor: generates a 1-sentence response to an assertion.
+
+        Only sees: the original assertion, sibling reactions so far, and the day's theme.
+        No full chat_history — keeps reactions focused on the assertion at hand.
+        """
+        # Intent → concrete action description
+        ACTION_DESCRIPTIONS = {
+            "accuse": f"{character_name} accuses {{target}} — blames {{target}} directly",
+            "defend_other": f"{character_name} defends {{target}} — tells the room to leave {{target}} alone",
+            "defend_self": f"{character_name} defends {character_name} — denies accusations",
+            "agree": f"{character_name} agrees with {{target}} — supports what {{target}} said",
+            "disagree": f"{character_name} disagrees with {{target}} — argues against {{target}}'s point",
+            "question": f"{character_name} questions {{target}} — demands {{target}} explain",
+            "deflect": f"{character_name} deflects — changes the subject",
+        }
+        action_desc = ACTION_DESCRIPTIONS.get(intent, f"{character_name} reacts").format(target=target)
+
+        # --- CONTEXT BLOCK (top) ---
+        prompt = ""
+        if character:
+            prompt += f"You are {character_name}, the {character.occupation}. {character.bio}\n"
+            prompt += f"Personality: {character.archetype}\n"
+            prompt += f"Speech style: {character.speech_pattern}\n\n"
+
+        prompt += f"Today's discussion topic: {main_topic}\n"
+        if claims_text:
+            prompt += f"Role claims:\n{claims_text}\n"
+        prompt += "\n"
+
+        # The assertion being reacted to
+        prompt += f"THE ASSERTION (what started this):\n"
+        prompt += f"  [{assertion_speaker}]: {assertion_dialogue}\n\n"
+
+        # Sibling reactions so far
+        if reaction_chain:
+            prompt += "REACTIONS SO FAR:\n"
+            for r in reaction_chain:
+                prompt += f"  [{r['speaker']}]: {r['dialogue']}\n"
+            prompt += "\n"
+
+        # --- DIRECTIVE BLOCK (bottom — strongest recall) ---
+        prompt += "=== YOUR DIRECTIVE (you MUST follow this exactly) ===\n"
+        prompt += f"Action: {action_desc}\n"
+        prompt += f"Emotion: {emotion}\n"
+        prompt += f"Motivation: {narrative_motivation}\n\n"
+
+        prompt += "Write EXACTLY 1 sentence of spoken dialogue responding to the assertion above.\n"
+
+        targeted_intents = {"accuse", "defend_other", "agree", "disagree", "question"}
+        if intent in targeted_intents and target and target != "None":
+            prompt += f"You MUST name {target} in your dialogue. NEVER use pronouns — always use character names.\n"
+        else:
+            prompt += "NEVER use pronouns — always use character names.\n"
+
+        prompt += "Your dialogue MUST match the action above. Do NOT contradict it.\n"
+        prompt += "Do NOT repeat or paraphrase what others already said.\n\n"
+
+        prompt += 'Respond with ONLY a JSON object:\n'
+        prompt += '{"dialogue": "<Your 1 sentence of spoken dialogue>"}\n'
 
         return prompt
 
@@ -192,37 +319,107 @@ class PromptService:
         return prompt
 
     @staticmethod
-    def build_voting_prompt(character_name: str, alive_characters: list[str], chat_history: list[str], public_events: list[str], secret_role: str, relationship_context: str = None, roster_text: str = None) -> str:
-        recent_history = chat_history[-5:] if chat_history else []
-        history_text = "\n".join(recent_history) if recent_history else "No conversation."
-        events_text = " | ".join(public_events[-3:]) if public_events else "None."
+    def build_role_reveal_prompt(character_name: str, claimed_role: str, findings: list[str],
+                                  chat_history: list[str], is_pressure: bool = False,
+                                  character=None) -> str:
+        """Generates in-character dialogue for a role reveal (real or fake)."""
+        recent_history = chat_history[-4:] if chat_history else []
+        history_text = "\n".join(recent_history) if recent_history else "(silence)"
 
-        prompt = "VOTE: The town is deciding who to lynch.\n\n"
+        ROLE_LABELS = {"guardian_angel": "Guardian Angel", "coroner": "Coroner"}
+        label = ROLE_LABELS.get(claimed_role, claimed_role)
 
-        if secret_role == "werewolf":
-            prompt += "You are THE WEREWOLF. Vote for an innocent who others already suspect.\n"
-            prompt += "You may claim to be the Guardian Angel or Coroner to justify your vote.\n\n"
-        elif secret_role == "guardian_angel":
-            prompt += "You are the GUARDIAN ANGEL. Vote for whoever you believe is the killer.\n"
-            prompt += "Consider revealing your role if it helps save an innocent.\n\n"
-        elif secret_role == "coroner":
-            prompt += "You are the CORONER. Use your findings to guide your vote.\n\n"
+        prompt = f"Recent conversation:\n{history_text}\n\n"
+
+        if is_pressure:
+            prompt += f"Someone else just claimed to be the {label}. You must counter their claim NOW.\n"
         else:
-            prompt += "You are INNOCENT. Vote for whoever you believe is the killer.\n\n"
+            prompt += f"You have decided to reveal your role to the town.\n"
 
-        prompt += f"Events: {events_text}\n"
-        if relationship_context:
-            prompt += f"Feelings: {relationship_context}\n"
-        prompt += f"\nRecent Chat:\n{history_text}\n\n"
+        prompt += f"YOUR ROLE: You are the {label}.\n"
 
-        valid_targets = [c for c in alive_characters if c != character_name]
-        prompt += f"Valid Targets: {', '.join(valid_targets)}, None (abstain)\n"
-        prompt += "You cannot vote for yourself.\n\n"
-        prompt += """Respond with ONLY a JSON object:
-{
-  "thought_process": "<1-sentence reasoning>",
-  "target": "<exact name from Valid Targets>"
-}"""
+        if findings:
+            prompt += "YOUR FINDINGS (share these with the town):\n"
+            for f in findings:
+                prompt += f"  - {f}\n"
+            prompt += "\n"
+        else:
+            prompt += "You have no findings to report yet.\n\n"
+
+        prompt += "Rules:\n"
+        prompt += f"1. Announce that you are the {label}. Be dramatic — this is a big moment.\n"
+        prompt += "2. If you have findings, share them clearly so the town understands.\n"
+        prompt += "3. Write 2-4 sentences of spoken dialogue. No actions, no prose.\n"
+        prompt += "4. NEVER use pronouns (you/he/she/they) to refer to anyone — always use their name.\n"
+
+        if character:
+            prompt += f"5. Speak in this style: {character.speech_pattern}\n"
+
+        prompt += '\nRespond with ONLY a JSON object:\n'
+        prompt += '{"dialogue": "<Your 2-4 sentences revealing your role and findings>"}\n'
+        return prompt
+
+    @staticmethod
+    def build_morning_report_prompt(character_name: str, claimed_role: str,
+                                     new_findings: list[str], chat_history: list[str],
+                                     character=None) -> str:
+        """Generates a morning report from a revealed role holder."""
+        recent_history = chat_history[-3:] if chat_history else []
+        history_text = "\n".join(recent_history) if recent_history else "(silence)"
+
+        ROLE_LABELS = {"guardian_angel": "Guardian Angel", "coroner": "Coroner"}
+        label = ROLE_LABELS.get(claimed_role, claimed_role)
+
+        prompt = f"Recent events:\n{history_text}\n\n"
+        prompt += f"You are the revealed {label}. The town knows your role.\n"
+        prompt += "Report your findings from last night to the town.\n\n"
+
+        if new_findings:
+            prompt += "NEW FINDINGS TO REPORT:\n"
+            for f in new_findings:
+                prompt += f"  - {f}\n"
+            prompt += "\n"
+        else:
+            prompt += "You have nothing new to report.\n\n"
+
+        prompt += "Rules:\n"
+        prompt += "1. Share your new findings clearly and directly.\n"
+        prompt += "2. Write 1-3 sentences of spoken dialogue. Be concise.\n"
+        prompt += "3. NEVER use pronouns (you/he/she/they) to refer to anyone — always use their name.\n"
+
+        if character:
+            prompt += f"4. Speak in this style: {character.speech_pattern}\n"
+
+        prompt += '\nRespond with ONLY a JSON object:\n'
+        prompt += '{"dialogue": "<Your 1-3 sentence morning report>"}\n'
+        return prompt
+
+    @staticmethod
+    def build_wolf_whisper_prompt(speaker_name: str, occupation: str, target: str,
+                                   engine_reasoning: str, valid_targets: list[str],
+                                   chat_history: list[str], character=None) -> str:
+        """Night phase: a fellow werewolf whispers their kill preference to the player."""
+        recent_history = chat_history[-4:] if chat_history else []
+        history_text = "\n".join(recent_history) if recent_history else "(silence)"
+
+        prompt = "NIGHT PHASE. You are whispering to your fellow werewolf about who to kill tonight.\n"
+        prompt += "Speak in a hushed, conspiratorial tone. Be brief — 1-2 sentences.\n\n"
+
+        prompt += f"Recent conversation:\n{history_text}\n\n"
+        prompt += f"Your preference: Kill {target}.\n"
+        prompt += f"Your reasoning: {engine_reasoning}\n"
+        prompt += f"Living villagers: {', '.join(valid_targets)}\n\n"
+
+        prompt += "Rules:\n"
+        prompt += f"1. You MUST name {target} as your preferred kill.\n"
+        prompt += "2. Give a brief in-character reason why this target is dangerous to the pack.\n"
+        prompt += "3. NEVER use pronouns (you/he/she/they) to refer to anyone — always use their name.\n"
+
+        if character:
+            prompt += f"4. Speak in this style: {character.speech_pattern}\n"
+
+        prompt += '\nRespond with ONLY a JSON object:\n'
+        prompt += '{"dialogue": "<Your 1-2 sentence whisper>"}\n'
         return prompt
 
     @staticmethod
@@ -254,54 +451,11 @@ class PromptService:
         prompt += "Rules:\n"
         prompt += "1. Write 1-3 sentences of final spoken dialogue. Raw emotion, no holding back.\n"
         prompt += "2. No actions, no prose, no JSON. Just your spoken words.\n"
+        prompt += "3. NEVER use pronouns (you/he/she/they) to refer to anyone — always use their name.\n"
 
         if character:
-            prompt += f"3. Voice: {character.speech_pattern} {character.verbal_quirks}\n"
+            prompt += f"4. Voice: {character.speech_pattern} {character.verbal_quirks}\n"
 
         prompt += "\nSpeak your final words:"
         return prompt
 
-    @staticmethod
-    def build_night_action_prompt(character_name: str, valid_targets: list[str], logical_history: list[str], relationship_context: str) -> str:
-        """Prompts an NPC werewolf to select a kill target."""
-        recent_history = logical_history[-5:] if logical_history else []
-        history_text = "\n".join(recent_history) if recent_history else "No prior actions."
-
-        prompt = "NIGHT PHASE: You are a WEREWOLF. Choose one villager to murder.\n"
-        prompt += "Pick someone dangerous to you, highly trusted, or onto your trail.\n\n"
-        prompt += f"Recent Actions:\n{history_text}\n"
-
-        if relationship_context:
-            prompt += f"Feelings: {relationship_context}\n"
-
-        prompt += f"\nValid Targets: {', '.join(valid_targets)}\n\n"
-        prompt += """Respond with ONLY a JSON object:
-{
-  "thought_process": "<1-sentence reason to kill this target>",
-  "target": "<exact name from Valid Targets>"
-}"""
-        return prompt
-
-    @staticmethod
-    def build_ga_night_prompt(character_name: str, valid_targets: list[str], last_protected: str, logical_history: list[str], relationship_context: str) -> str:
-        """Prompts an NPC Guardian Angel to select a protection target."""
-        recent_history = logical_history[-5:] if logical_history else []
-        history_text = "\n".join(recent_history) if recent_history else "No prior actions."
-
-        prompt = "NIGHT PHASE: You are the GUARDIAN ANGEL. Choose one person to protect from the werewolf.\n"
-        prompt += "Pick someone you think the werewolves will target tonight.\n\n"
-        prompt += f"Recent Actions:\n{history_text}\n"
-
-        if relationship_context:
-            prompt += f"Feelings: {relationship_context}\n"
-
-        if last_protected:
-            prompt += f"\nYou CANNOT protect {last_protected} (protected last night).\n"
-
-        prompt += f"\nValid Targets: {', '.join(valid_targets)}\n\n"
-        prompt += """Respond with ONLY a JSON object:
-{
-  "thought_process": "<1-sentence reason to protect this target>",
-  "target": "<exact name from Valid Targets>"
-}"""
-        return prompt

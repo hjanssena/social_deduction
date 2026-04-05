@@ -17,7 +17,9 @@ RAW_CHARACTER_DATA = [
             "assertion_drive": 8,
             "contrarian_index": 7,
             "trust_volatility": 2,
-            "logic_vs_emotion": 3
+            "logic_vs_emotion": 3,
+            "performance": 3,
+            "intuition": 4
         },
         "prologue_reactions": [
             "Foul play? In our town? You better not be pointing fingers without proof, Mayor.",
@@ -36,7 +38,9 @@ RAW_CHARACTER_DATA = [
             "assertion_drive": 6,
             "contrarian_index": 8,
             "trust_volatility": 3,
-            "logic_vs_emotion": 9
+            "logic_vs_emotion": 9,
+            "performance": 6,
+            "intuition": 9
         },
         "prologue_reactions": [
             "Oh dear... this is highly irregular. The records show no history of violence in that part of the estate.",
@@ -55,7 +59,9 @@ RAW_CHARACTER_DATA = [
             "assertion_drive": 9,
             "contrarian_index": 4,
             "trust_volatility": 5,
-            "logic_vs_emotion": 5
+            "logic_vs_emotion": 5,
+            "performance": 7,
+            "intuition": 3
         }
     },
     {
@@ -69,7 +75,9 @@ RAW_CHARACTER_DATA = [
             "assertion_drive": 4,
             "contrarian_index": 2,
             "trust_volatility": 8,
-            "logic_vs_emotion": 2
+            "logic_vs_emotion": 2,
+            "performance": 2,
+            "intuition": 5
         },
         "prologue_reactions": [
             "W-what do you mean he’s gone? That doesn’t make any sense... are we sure he’s not just hiding?",
@@ -88,7 +96,9 @@ RAW_CHARACTER_DATA = [
             "assertion_drive": 5,
             "contrarian_index": 9,
             "trust_volatility": 7,
-            "logic_vs_emotion": 6
+            "logic_vs_emotion": 6,
+            "performance": 5,
+            "intuition": 8
         },
         "prologue_reactions": [
             "Oh... something *did* pass through last night. The trees were whispering... hehe...",
@@ -107,7 +117,9 @@ RAW_CHARACTER_DATA = [
             "assertion_drive": 7,
             "contrarian_index": 3,
             "trust_volatility": 5,
-            "logic_vs_emotion": 6
+            "logic_vs_emotion": 6,
+            "performance": 8,
+            "intuition": 7
         },
         "prologue_reactions": [
             "Alright, alright... let’s not flip the table just yet, friends. We need clear heads here.",
@@ -126,7 +138,9 @@ RAW_CHARACTER_DATA = [
             "assertion_drive": 2,
             "contrarian_index": 8,
             "trust_volatility": 1,
-            "logic_vs_emotion": 10
+            "logic_vs_emotion": 10,
+            "performance": 4,
+            "intuition": 10
         },
         "prologue_reactions": [
             "People don’t vanish. They end up somewhere. Usually underground.",

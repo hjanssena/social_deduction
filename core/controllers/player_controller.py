@@ -93,7 +93,7 @@ class PlayerController:
         self.io.display("="*50 + "\033[0m\n")
         self.io.display("Who do you vote to lynch?")
 
-        targets = self.gm.state.alive_characters + ["None (Abstain)"]
+        targets = [n for n in self.gm.state.alive_characters if n != "Player"] + ["None (Abstain)"]
         for i, target in enumerate(targets):
             self.io.display(f"[{i + 1}] {target}")
 

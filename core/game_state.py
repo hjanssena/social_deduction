@@ -28,10 +28,19 @@ class GameState:
         self.ga_protection_history = []  # ["Night 0: Protected Elias", ...]
         self.coroner_knowledge = []
         self.opinions = {}  # {viewer: {target: "short opinion"}} — computed at end of each day
+        self.contradiction_log = {}  # {name: [(day, intent, target), ...]}
+        self.fake_claims = []  # [{claimant: str, claimed_role: str, day: int}]
+        self.revealed_roles = {}  # {name: claimed_role} — public claims (real or fake)
+        self.reveal_pressure = {}  # {name: claimed_role} — set when someone claims your role
         self.main_topic = "Victor's uncle has mysteriously disappeared. Someone in this room is responsible."
-        
+
         # Add the Player to the alive roster implicitly
         self.alive_characters = [c.name for c in characters] + ["Player"]
+
+        self.suspicion_matrix = {
+            name: {other: 0 for other in self.alive_characters if other != name}
+            for name in self.alive_characters
+        }
         
         # Randomized starting trust — gives NPCs pre-existing opinions
         self.trust_matrix = {
