@@ -16,40 +16,10 @@ class PromptService:
 
     @staticmethod
     def build_system_prompt(character, secret_role: str = "villager", known_werewolves: list = None, coroner_knowledge: list = None, ga_protection_history: list = None) -> str:
-        """Concise personality + role directive. Kept short for small-model context budgets."""
+        """Concise personality. Kept short for small-model context budgets."""
         # Compact profile — one block, no redundant labels
         prompt = f"You are {character.name}, the {character.occupation}. {character.bio}\n"
         prompt += f"Personality: {character.archetype}\n\n"
-
-        if secret_role == "werewolf":
-            prompt += "SECRET: YOU ARE THE WEREWOLF (THE KILLER).\n"
-            if known_werewolves and len(known_werewolves) > 1:
-                pack = [w for w in known_werewolves if w != character.name]
-                prompt += f"Your fellow werewolves: {', '.join(pack)}. Protect them secretly.\n"
-            prompt += "NEVER confess. Frame others aggressively.\n"
-            prompt += "DECEPTION TOOLS: You may falsely claim to be the Guardian Angel or Coroner to gain trust.\n"
-            prompt += "Example: 'I protected someone last night' or 'As coroner, I saw they were innocent.'\n\n"
-        elif secret_role == "guardian_angel":
-            prompt += "SECRET: You are the GUARDIAN ANGEL. You protect one person each night.\n"
-            prompt += "You may reveal this to gain trust, or stay hidden to avoid werewolf targeting.\n\n"
-        elif secret_role == "coroner":
-            prompt += "SECRET: You are the CORONER. After each lynch, you learn the victim's true role.\n"
-            prompt += "You may share findings during discussion to guide the town.\n\n"
-        else:
-            prompt += "SECRET: You are an INNOCENT VILLAGER. Find and lynch the werewolves.\n\n"
-
-        if secret_role == "guardian_angel" and ga_protection_history:
-            prompt += "YOUR PROTECTION LOG:\n"
-            for entry in ga_protection_history:
-                prompt += f"- {entry}\n"
-            prompt += "\n"
-
-        if secret_role == "coroner" and coroner_knowledge:
-            prompt += "YOUR FINDINGS:\n"
-            for finding in coroner_knowledge:
-                prompt += f"- {finding}\n"
-            prompt += "\n"
-
         prompt += f"Stay in character as {character.name}. Speak in first person."
         return prompt
 
@@ -60,7 +30,7 @@ class PromptService:
                                roster_text: str, character=None,
                                claims_text: str = "",
                                game_context: str = "") -> str:
-        """Lean assertion prompt. Enforces a hard JSON boundary to stop runaway generation."""
+        """Lean assertion prompt. Uses precise dictionary mapping for few-shot examples."""
         recent_history = chat_history[-4:] if chat_history else []
         history_text = "\n".join(recent_history) if recent_history else "(silence)"
 
@@ -92,19 +62,38 @@ class PromptService:
 
         targeted_intents = {"accuse", "defend_other", "agree", "disagree", "question"}
         if intent in targeted_intents and target and target != "None":
-            prompt += f"RULE 1: You MUST name {target} in your dialogue. Do not use pronouns.\n"
-        
-        prompt += "RULE 2: Output ONLY spoken words. No actions (like *looks around*). No narration.\n"
-        prompt += "RULE 3: Do NOT repeat the exact phrases of previous speakers.\n\n"
+            prompt += f"RULE: You MUST address {target} by their name in your dialogue. Do not use pronouns.\n\n"
+
+        # --- EXACT DICTIONARY MATCH FEW-SHOT INJECTION ---
+        if character and hasattr(character, "speech_examples") and isinstance(character.speech_examples, dict):
+            intent_examples = character.speech_examples.get(intent, {})
+            
+            if isinstance(intent_examples, dict) and intent_examples:
+                # 1. Reverse the string format to find the dictionary key
+                template_key = engine_reasoning
+                if target and target != "None":
+                    template_key = engine_reasoning.replace(target, "{target}")
+                
+                # 2. Look up the exact example
+                exact_example = intent_examples.get(template_key)
+                
+                # 3. Fallback: If exact match fails, grab the first available example for this intent
+                if not exact_example:
+                    exact_example = next(iter(intent_examples.values()), None)
+
+                if exact_example:
+                    prompt += "=== EXAMPLE OF HOW YOU SPEAK ===\n"
+                    prompt += "Use this specific example to guide how you express your current reasoning:\n"
+                    formatted_ex = exact_example.replace("{target}", target if target != "None" else "them")
+                    prompt += f'- "{formatted_ex}"\n\n'
 
         prompt += 'Respond with ONLY a JSON object formatted exactly like this:\n'
         prompt += '{\n'
-        prompt += '  "think_context": "<1 sentence: What is happening in the conversation right now?>",\n'
-        prompt += '  "think_directive": "<1 sentence: What exactly do you need to say based on your Action and Reason?>",\n'
-        prompt += '  "think_persona": "<1 sentence: How does your Emotion and Voice change the way you deliver this?>",\n'
+        prompt += '  "internal_monologue": "<1-2 sentences: Consider the context, your engine directive, and how your persona feels about this>",\n'
         prompt += '  "dialogue": "<Write 1-2 in-character sentences here>"\n'
         prompt += '}'
 
+#        print(prompt)
         return prompt
 
     @staticmethod
@@ -114,7 +103,7 @@ class PromptService:
                               reaction_chain: list[dict], main_topic: str, roster_text: str,
                               character=None, claims_text: str = "",
                               game_context: str = "") -> str:
-        """Ultra-minimal reaction prompt. Uses JSON to prevent the LLM from writing a play."""
+        """Ultra-minimal reaction prompt. Uses precise dictionary mapping for few-shot examples."""
         ACTION_VERBS = {
             "accuse": f"blame {target}",
             "defend_other": f"defend {target}",
@@ -123,6 +112,7 @@ class PromptService:
             "disagree": f"disagree with {target}",
             "question": f"question {target}",
             "deflect": "change the subject",
+            "neutral": "make a general observation"
         }
         
         prompt = "CURRENT CONTEXT\n"
@@ -135,26 +125,46 @@ class PromptService:
 
         if reaction_chain:
             prompt += "Other immediate reactions:\n"
-            for r in reaction_chain[-2:]: # Keep it super tight!
+            for r in reaction_chain[-2:]: 
                 prompt += f"{r['speaker']} said: \"{r['dialogue']}\"\n"
             prompt += "\n"
 
         prompt += "YOUR TASK\n"
         prompt += f"You {action}. You feel {emotion}.\n"
+        prompt += f"Reason: {engine_reasoning}\n"
         if character:
-            prompt += f"Voice: {character.speech_pattern}\n"
+            prompt += f"Voice: {character.speech_pattern}\n\n"
+
+        # --- EXACT DICTIONARY MATCH FEW-SHOT INJECTION ---
+        if character and hasattr(character, "speech_examples") and isinstance(character.speech_examples, dict):
+            intent_examples = character.speech_examples.get(intent, {})
             
-        prompt += "RULE 1: Output ONLY your spoken words. No actions. No narration.\n"
-        prompt += "RULE 2: You MUST NOT copy the vocabulary or sentence structure of the other speakers.\n\n"
+            if isinstance(intent_examples, dict) and intent_examples:
+                # 1. Reverse the string format to find the dictionary key
+                template_key = engine_reasoning
+                if target and target != "None":
+                    template_key = engine_reasoning.replace(target, "{target}")
+                
+                # 2. Look up the exact example
+                exact_example = intent_examples.get(template_key)
+                
+                # 3. Fallback: If exact match fails, grab the first available example for this intent
+                if not exact_example:
+                    exact_example = next(iter(intent_examples.values()), None)
+
+                if exact_example:
+                    prompt += "=== EXAMPLE OF HOW YOU SPEAK ===\n"
+                    prompt += "Use this specific example to guide how you express your current reasoning:\n"
+                    formatted_ex = exact_example.replace("{target}", target if target != "None" else "them")
+                    prompt += f'- "{formatted_ex}"\n\n'
 
         prompt += 'Respond with ONLY a JSON object formatted exactly like this:\n'
         prompt += '{\n'
-        prompt += '  "think_context": "<1 sentence: What is happening in the conversation right now?>",\n'
-        prompt += '  "think_directive": "<1 sentence: What exactly do you need to say based on your Action and Reason?>",\n'
-        prompt += '  "think_persona": "<1 sentence: How does your Emotion and Voice change the way you deliver this?>",\n'
+        prompt += '  "internal_monologue": "<1-2 sentences: Consider the context, your engine directive, and how your persona feels about this>",\n'
         prompt += '  "dialogue": "<Write 1 in-character short sentence here>"\n'
         prompt += '}'
 
+        #print(prompt)
         return prompt
 
     @staticmethod

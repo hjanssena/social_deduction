@@ -11,5 +11,8 @@ def create_llm(config: dict) -> LLMBase:
     elif backend == "llamacpp":
         from services.llm_service import LLMService
         return LLMService(config)
+    elif backend == "gpt4all":
+        from services.gpt4all_service import GPT4AllService
+        return GPT4AllService(config)
     else:
-        raise ValueError(f"Unknown LLM backend: '{backend}'. Use 'llamacpp' or 'ollama'.")
+        raise ValueError(f"Unknown LLM backend: '{backend}'. Use 'llamacpp', 'ollama', or 'gpt4all'.")

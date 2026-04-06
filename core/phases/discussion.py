@@ -262,24 +262,26 @@ class DiscussionPhase:
         player_has_reacted = (speaker_name == "Player")
         reactions_made = 0
         prefetched_reactor = None
+        skip_player_prompt = False  # True after a None result to avoid double-prompting
 
         while reaction_queue:
             # Prompt player before generating the next NPC reaction
             if not player_has_reacted:
-                p_react = io.prompt_reaction(speaker_name)
-                if p_react.strip():
-                    parsed = gm.player_controller.process_reaction(
-                        p_react, speaker_name, assertion_dialogue, reaction_chain,
-                    )
-                    player_has_reacted = True
-                    reactions_made += 1
-                    reaction_chain.append({
-                        "speaker": "Player",
-                        "dialogue": p_react,
-                        "intent": parsed.get("intent", "neutral"),
-                    })
-                    prefetcher.invalidate()
-                    prefetched_reactor = None
+                if not skip_player_prompt:
+                    p_react = io.prompt_reaction(speaker_name)
+                    if p_react.strip():
+                        parsed = gm.player_controller.process_reaction(
+                            p_react, speaker_name, assertion_dialogue, reaction_chain,
+                        )
+                        player_has_reacted = True
+                        reactions_made += 1
+                        reaction_chain.append({
+                            "speaker": "Player",
+                            "dialogue": p_react,
+                            "intent": parsed.get("intent", "neutral"),
+                        })
+                        prefetcher.invalidate()
+                        prefetched_reactor = None
             elif reactions_made > 0:
                 io.pause()
 
@@ -298,6 +300,17 @@ class DiscussionPhase:
                 )
 
             if not reaction_result:
+                # Suppress duplicate player prompt on the next iteration and still
+                # prefetch the next reactor so we don't lose the parallelism benefit.
+                skip_player_prompt = True
+                if reaction_queue:
+                    next_reactor = reaction_queue[0]
+                    prefetched_reactor = next_reactor
+                    prefetcher.submit(
+                        gm.npc_controller.process_reaction,
+                        speaker_name, assertion_data, next_reactor, assertions_made,
+                        reaction_chain=reaction_chain,
+                    )
                 continue
 
             self._commit_reaction(reactor_name, reaction_result)
@@ -308,6 +321,7 @@ class DiscussionPhase:
                 "intent": reaction_result.get("intent", "neutral"),
             })
             reactions_made += 1
+            skip_player_prompt = False  # reset so player can react to the next displayed reaction
 
             # Prefetch next NPC reaction while player reads this one
             if reaction_queue:
