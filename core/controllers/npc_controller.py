@@ -60,72 +60,46 @@ class NPCController:
         return self._handle_role_reveal(speaker_name, char_obj, role, engine_result)
 
     # ================================================================
-    # ASSERTION PIPELINE: StatEngine → Weaver LLM → Actor LLM
+    # ASSERTION PIPELINE: StatEngine → single LLM call (reasoning + dialogue)
     # ================================================================
 
     def generate_assertion(self, speaker_name: str, current_assertion: int) -> dict:
         """Pure generation — no state mutations, no display. Caller applies side effects."""
         char_obj = self.gm.characters[speaker_name]
         role = self.gm.state.roles.get(speaker_name, "villager")
-        engine = self.gm.stat_engine
 
-        # --- STEP 1: StatEngine (deterministic, side-effect-free) ---
-        engine_result = engine.compute_assertion(speaker_name)
-
+        # --- STEP 1: StatEngine ---
+        engine_result = self.gm.stat_engine.compute_assertion(speaker_name)
         intent = engine_result["intent"]
         target = engine_result["target"]
         emotion = engine_result["emotion"]
         engine_reasoning = engine_result["engine_reasoning"]
 
-        # --- STEP 2: Weaver LLM (bridges engine → narrative) ---
-        roster_text = self.gm.get_roster_text(viewer=speaker_name)
-        claims_text = self.gm.get_claims_text()
-        weaver_system = f"You are an analytical narrator. Analyze {speaker_name} the {char_obj.occupation}. Personality: {char_obj.archetype}"
-        weaver_prompt = self.gm.prompt_builder.build_weaver_prompt(
-            speaker_name=speaker_name,
-            occupation=char_obj.occupation,
-            intent=intent,
-            target=target,
-            engine_reasoning=engine_reasoning,
-            chat_history=self.gm.state.chat_history,
-            main_topic=self.gm.state.main_topic,
-            public_events=self.gm.state.public_events,
-            roster_text=roster_text,
-            claims_text=claims_text,
-        )
-
-        weaver_data = self.gm.llm.generate_json(weaver_system, weaver_prompt)
-        narrative_motivation = weaver_data.get("narrative_motivation", engine_reasoning) if weaver_data else engine_reasoning
-
-        # Cache weaver debug for display by caller (preserves engine→weaver→actor order)
-        weaver_debug = None
-        if weaver_data:
-            situation = weaver_data.get("situation_analysis", "")
-            weaver_debug = f"\033[90m[Weaver ({speaker_name})]: {situation} | Motivation: {narrative_motivation}\033[0m"
-
-        # --- STEP 3: Actor LLM (pure roleplay) ---
+        # --- STEP 2: Single LLM call (reasoning → dialogue) ---
         werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
         coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
         ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
-        actor_system = self.gm.prompt_builder.build_system_prompt(
+        system = self.gm.prompt_builder.build_system_prompt(
             char_obj, role, known_werewolves=werewolves,
             coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history,
         )
-        actor_prompt = self.gm.prompt_builder.build_actor_prompt(
+        prompt = self.gm.prompt_builder.build_assertion_prompt(
             character_name=speaker_name,
-            emotion=emotion,
-            narrative_motivation=narrative_motivation,
-            chat_history=self.gm.state.chat_history,
-            roster_text=roster_text,
-            character=char_obj,
             intent=intent,
             target=target,
-            claims_text=claims_text,
+            emotion=emotion,
+            engine_reasoning=engine_reasoning,
+            chat_history=self.gm.state.chat_history,
             main_topic=self.gm.state.main_topic,
+            roster_text=self.gm.get_roster_text(viewer=speaker_name),
+            character=char_obj,
+            claims_text=self.gm.get_claims_text(),
+            game_context=self.gm.get_game_context(),
         )
-
-        actor_data = self.gm.llm.generate_json(actor_system, actor_prompt, use_narrative_cfg=True)
-        raw_dialogue = actor_data.get("dialogue", "... (Glares in silence)") if actor_data else "... (Glares in silence)"
+        
+        data = self.gm.llm.generate_json(system, prompt, True)
+        #print(data)
+        raw_dialogue = data.get("dialogue", "... (Glares in silence)") if data else "... (Glares in silence)"
 
         return {
             "dialogue": raw_dialogue,
@@ -133,11 +107,10 @@ class NPCController:
             "target": target,
             "emotion": emotion,
             "reasoning": engine_reasoning,
-            "_weaver_debug": weaver_debug,
         }
 
     # ================================================================
-    # REACTION PIPELINE: StatEngine → Reaction Weaver LLM → Actor LLM
+    # REACTION PIPELINE: StatEngine → single LLM call (reasoning + dialogue)
     # ================================================================
 
     def process_reaction(self, primary_speaker: str, assertion_data: dict,
@@ -154,19 +127,18 @@ class NPCController:
         """
         reactor_obj = self.gm.characters[reactor_name]
         role = self.gm.state.roles.get(reactor_name, "villager")
-        engine = self.gm.stat_engine
 
         # Engine ALWAYS reasons about the original assertion
         speaker_intent = assertion_data.get("intent", "neutral")
         speaker_target = assertion_data.get("target", "None")
         speaker_dialogue = assertion_data.get("dialogue", "...")
 
-        # --- STEP 1: StatEngine (deterministic, side-effect-free) ---
-        engine_result = engine.compute_reaction(
+        # --- STEP 1: StatEngine ---
+        engine_result = self.gm.stat_engine.compute_reaction(
             reactor_name, primary_speaker, speaker_intent, speaker_target
         )
         if engine_result is None:
-            return None  # Engine decided this reactor has nothing meaningful to say
+            return None
 
         intent = engine_result["intent"]
         target = engine_result["target"]
@@ -174,81 +146,45 @@ class NPCController:
         engine_reasoning = engine_result["engine_reasoning"]
         intensity = engine_result.get("intensity", "medium")
 
-        # --- STEP 2: Reaction Weaver LLM (role-free system prompt) ---
-        claims_text = self.gm.get_claims_text()
+        # --- STEP 2: Single LLM call (reasoning → dialogue) ---
         chain = reaction_chain or []
-
-        # Previous reaction for the weaver (last in chain, if any)
-        prev_reaction = chain[-1] if chain else None
-
-        # --- STEP 2: Reaction Weaver LLM ---
-        roster_text = self.gm.get_roster_text(viewer=reactor_name)
-        weaver_system = f"You are an analytical narrator. Analyze {reactor_name} the {reactor_obj.occupation}. Personality: {reactor_obj.archetype}"
-
-        weaver_prompt = self.gm.prompt_builder.build_reaction_weaver_prompt(
-            reactor_name=reactor_name,
-            reactor_occupation=reactor_obj.occupation,
-            intent=intent,
-            target=target,
-            engine_reasoning=engine_reasoning,
-            intensity=intensity,
-            speaker_name=primary_speaker,
-            speaker_dialogue=speaker_dialogue,
-            speaker_intent=speaker_intent,
-            chat_history=self.gm.state.chat_history,
-            main_topic=self.gm.state.main_topic,
-            public_events=self.gm.state.public_events,
-            roster_text=roster_text,
-            prev_reaction=prev_reaction,
-            claims_text=claims_text,
-        )
-
-        weaver_data = self.gm.llm.generate_json(weaver_system, weaver_prompt)
-        narrative_motivation = weaver_data.get("narrative_motivation", engine_reasoning) if weaver_data else engine_reasoning
-
-        # Cache weaver debug for display by caller (preserves engine→weaver→actor order)
-        weaver_debug = None
-        if weaver_data:
-            core_claim = weaver_data.get("core_claim", "")
-            weaver_debug = (
-                f"\033[90m[Reaction Weaver ({reactor_name})]: Claim: {core_claim} | "
-                f"Motivation: {narrative_motivation}\033[0m"
-            )
-
-        # --- STEP 3: Reaction Actor LLM (isolated context — only assertion + sibling reactions) ---
         werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
         coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
         ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
-        actor_system = self.gm.prompt_builder.build_system_prompt(
+        system = self.gm.prompt_builder.build_system_prompt(
             reactor_obj, role, known_werewolves=werewolves,
             coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history,
         )
-        actor_prompt = self.gm.prompt_builder.build_reaction_actor_prompt(
+        prompt = self.gm.prompt_builder.build_reaction_prompt(
             character_name=reactor_name,
-            emotion=emotion,
-            narrative_motivation=narrative_motivation,
             intent=intent,
             target=target,
+            emotion=emotion,
+            engine_reasoning=engine_reasoning,
             assertion_speaker=primary_speaker,
             assertion_dialogue=speaker_dialogue,
             reaction_chain=chain,
             main_topic=self.gm.state.main_topic,
+            roster_text=self.gm.get_roster_text(viewer=reactor_name),
             character=reactor_obj,
-            claims_text=claims_text,
+            claims_text=self.gm.get_claims_text(),
+            game_context=self.gm.get_game_context(),
         )
-
-        actor_data = self.gm.llm.generate_json(actor_system, actor_prompt, use_narrative_cfg=True)
-        raw_dialogue = actor_data.get("dialogue", "... (Glares in silence)") if actor_data else "... (Glares in silence)"
+        data = self.gm.llm.generate_json(system, prompt, True)
+        raw_dialogue = data.get("dialogue", "... (Glares in silence)") if data else "... (Glares in silence)"
+        # print(data)
+        # raw_dialogue = self.gm.llm.generate_text(system, prompt)
+        # if not raw_dialogue or raw_dialogue.isspace():
+        #     raw_dialogue = "... (Glares in silence)"
 
         return {
-            "dialogue": raw_dialogue,
+            "dialogue": raw_dialogue.strip().strip('"'),
             "intent": intent,
             "target": target,
             "emotion": emotion,
             "reasoning": engine_reasoning,
             "primary_speaker": primary_speaker,
             "intensity": intensity,
-            "_weaver_debug": weaver_debug,
         }
 
     # ================================================================

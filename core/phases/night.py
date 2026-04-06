@@ -19,13 +19,11 @@ class NightPhase:
         # Compute opinions from the day's interactions before night resolves
         state.opinions = TrustManager.compute_opinions(state)
 
-        io.display("\n\033[36m" + "="*50)
-        io.display("                 THE NIGHT PHASE")
-        io.display("="*50 + "\033[0m\n")
+        io.show_phase("THE NIGHT PHASE", state.day)
 
         result = state.check_win_condition()
         if result:
-            io.display(WIN_MESSAGES[result])
+            io.show_game_over(result, WIN_MESSAGES[result])
             state.phase = GamePhase.GAME_OVER
             return
 
@@ -44,8 +42,7 @@ class NightPhase:
 
         # --- Protection Check ---
         if killed_target and killed_target == protected_target:
-            # GA saved someone — the village only knows nobody died (no public reveal)
-            io.display("\n\033[92m[System] The morning sun rises. Miraculously, everyone survived the night.\033[0m")
+            io.show_system("The morning sun rises. Miraculously, everyone survived the night.", style="success")
             state.public_events.append(f"Night {state.day}: No one was killed.")
             state.main_topic = "No one died last night, but the killer is still out there."
             state.killed_last_night = []
@@ -57,7 +54,7 @@ class NightPhase:
         state.ga_protected_tonight = None
 
         if state.phase != GamePhase.GAME_OVER:
-            io.pause("\n\033[90m[Press Enter to start the next day] >\033[0m ")
+            io.pause()
             state.day += 1
             state.phase = GamePhase.DISCUSSION
 
@@ -69,7 +66,7 @@ class NightPhase:
         if "Player" in alive_werewolves:
             return self._player_werewolf_kill(alive_werewolves, alive_villagers)
 
-        io.display("\033[90m[System] The village sleeps... but something evil stalks the night.\033[0m")
+        io.show_system("The village sleeps... but something evil stalks the night.", style="muted")
 
         votes = []
         for npc in alive_werewolves:
@@ -88,12 +85,12 @@ class NightPhase:
 
         npc_wolves = [w for w in alive_werewolves if w != "Player"]
         if npc_wolves:
-            io.display("\033[90m[System] Your fellow werewolves whisper their desires in the dark...\033[0m")
+            io.show_system("Your fellow werewolves whisper their desires in the dark...", style="muted")
             for npc in npc_wolves:
                 whisper = gm.npc_controller.generate_wolf_whisper(npc, alive_villagers)
-                io.display(f"\033[91m[{npc} (Whisper)]: {whisper['dialogue']}\033[0m")
+                io.show_dialogue(npc, "Pack", whisper["dialogue"], intent="whisper")
         else:
-            io.display("\033[91m[System] You are the lone werewolf. The choice is yours entirely.\033[0m")
+            io.show_system("You are the lone werewolf. The choice is yours entirely.", style="error")
 
         return gm.player_controller.get_kill_target(alive_villagers)
 
@@ -106,10 +103,7 @@ class NightPhase:
         state.killed_last_night = []
 
         if killed_target and killed_target != "None":
-            io.display(
-                f"\n\033[91m[System] Screams shatter the morning silence. "
-                f"{killed_target} has been murdered!\033[0m"
-            )
+            io.show_death(killed_target, "killed")
 
             state.alive_characters.remove(killed_target)
             state.killed_last_night.append(killed_target)
@@ -119,24 +113,23 @@ class NightPhase:
             state.main_topic = f"{killed_target} was murdered last night. The killer is still among us."
 
             if killed_target == "Player":
-                io.display("\n\033[91m[GAME OVER] You were murdered by the werewolves in your sleep.\033[0m")
+                io.show_game_over("player_killed", "You were murdered by the werewolves in your sleep.")
                 state.phase = GamePhase.GAME_OVER
                 return
 
             result = state.check_win_condition()
             if result:
-                io.display(WIN_MESSAGES[result])
+                io.show_game_over(result, WIN_MESSAGES[result])
                 state.phase = GamePhase.GAME_OVER
                 return
         else:
-            io.display("\n\033[92m[System] The morning sun rises. Miraculously, everyone survived the night.\033[0m")
+            io.show_system("The morning sun rises. Miraculously, everyone survived the night.", style="success")
             state.public_events.append(f"Night {state.day}: No one was killed.")
             state.main_topic = "No one died last night, but the killer is still out there."
 
     def _resolve_ga_protection(self) -> str | None:
         """Determines who the Guardian Angel protects tonight."""
         gm = self.gm
-        io = gm.io
         state = gm.state
 
         ga_name = None
@@ -165,28 +158,17 @@ class NightPhase:
         """Menu for the player Guardian Angel to choose a protection target."""
         io = self.gm.io
 
-        io.display("\n\033[94m" + "="*50)
-        io.display("           GUARDIAN ANGEL - YOUR VIGIL")
-        io.display("="*50 + "\033[0m\n")
-        io.display("Choose one person to protect from the werewolf tonight:")
-
-        for i, target in enumerate(valid_targets):
-            io.display(f"[{i + 1}] {target}")
-
-        while True:
-            try:
-                choice = int(io.prompt("\n\033[90m[Enter the number of your choice] >\033[0m ")) - 1
-                if 0 <= choice < len(valid_targets):
-                    selected = valid_targets[choice]
-                    io.display(f"\033[94m[System] You watch over {selected} through the night.\033[0m")
-                    return selected
-                else:
-                    io.display("\033[91mInvalid choice. Try again.\033[0m")
-            except ValueError:
-                io.display("\033[91mPlease enter a number.\033[0m")
+        choice = io.prompt_menu(
+            "Choose one person to protect from the werewolf tonight:",
+            valid_targets,
+            context="protect",
+        )
+        selected = valid_targets[choice]
+        io.show_system(f"You watch over {selected} through the night.", style="accent")
+        return selected
 
     def _npc_ga_protect(self, ga_name: str, valid_targets: list[str]) -> str:
-        """NPC Guardian Angel chooses a protection target via LLM."""
+        """NPC Guardian Angel chooses a protection target via stat engine."""
         gm = self.gm
         pref = gm.npc_controller.generate_protect_preference(ga_name, valid_targets)
         target = pref.get("target", None)

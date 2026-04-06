@@ -14,9 +14,17 @@ class LLMBase(ABC):
         """Send a chat completion request. Returns raw response text."""
         pass
 
+    @staticmethod
+    def _sanitize_json_text(text: str) -> str:
+        """Fix common LLM JSON quirks: curly/smart quotes → straight quotes."""
+        text = text.replace("\u201c", '"').replace("\u201d", '"')  # " "
+        text = text.replace("\u2018", "'").replace("\u2019", "'")  # ' '
+        return text
+
     def generate_json(self, system_prompt: str, user_prompt: str, use_narrative_cfg: bool = False) -> dict:
         cfg = self.config.get("narrative" if use_narrative_cfg else "logic", {})
         response_text = self._chat(system_prompt, user_prompt, cfg, json_mode=True)
+        response_text = self._sanitize_json_text(response_text)
 
         # Try parsing directly first, then extract if needed
         try:

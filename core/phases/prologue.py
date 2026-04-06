@@ -13,18 +13,15 @@ class ProloguePhase:
         io = gm.io
         state = gm.state
 
-        io.display("\n" + "="*50)
-        io.display("                 THE GATHERING")
-        io.display("="*50 + "\n")
+        io.show_phase("THE GATHERING", state.day)
 
-        io.display("\033[36mThe wind howls against the thick wooden shutters of the local tavern.\033[0m")
-        io.display("\033[36mIn a settlement this small, a sudden gathering called by the Mayor is never a good sign.\033[0m")
-        io.display("\033[36mThe handful of residents murmur nervously, their faces illuminated by the flickering hearth.\033[0m")
-        io.display("\033[36mVictor stands at the head of the room, looking older and more tired than anyone has ever seen him.\033[0m")
-        io.display("\033[36mHe raises a heavy hand, and the tavern falls dead silent.\033[0m\n")
+        io.show_narration("The wind howls against the thick wooden shutters of the local tavern.")
+        io.show_narration("In a settlement this small, a sudden gathering called by the Mayor is never a good sign.")
+        io.show_narration("The handful of residents murmur nervously, their faces illuminated by the flickering hearth.")
+        io.show_narration("Victor stands at the head of the room, looking older and more tired than anyone has ever seen him.")
+        io.show_narration("He raises a heavy hand, and the tavern falls dead silent.")
 
         io.pause()
-        io.display("")
 
         # Victor's opening
         opening_statement = (
@@ -33,7 +30,7 @@ class ProloguePhase:
         )
 
         state.chat_history.append(f"[Victor -> Room]: {opening_statement}")
-        io.display(f"[Victor -> Room]: {opening_statement}")
+        io.show_dialogue("Victor", "Room", opening_statement)
 
         state.logical_history.append("Victor [accuse] -> Room (Emotion: fearful). Reason: His uncle is missing.")
 
@@ -57,46 +54,51 @@ class ProloguePhase:
                 reaction = random.choice(fallback_reactions)
 
             state.chat_history.append(f"[{npc} -> Room]: {reaction}")
-            io.display(f"[{npc} -> Room]: {reaction}")
+            io.show_dialogue(npc, "Room", reaction)
 
             state.logical_history.append(
                 f"{npc} [neutral] -> Room (Emotion: suspicious). Reason: Reacting to the Mayor's news."
             )
             io.pause()
 
-        io.display("\n\033[90m[System]: The shock settles. The room turns to each other in suspicion...\033[0m")
+        io.show_system("The shock settles. The room turns to each other in suspicion...", style="muted")
         io.pause()
 
         self._reveal_role(state, io)
 
-        io.pause("\033[90m[Press Enter to begin Discussion] >\033[0m ")
+        io.pause()
         state.phase = GamePhase.DISCUSSION
 
     def _reveal_role(self, state, io):
         player_role = state.roles.get("Player", "villager")
-        io.display("\n" + "="*50)
-        io.display("                 YOUR SECRET ROLE")
-        io.display("="*50)
 
         if player_role == "werewolf":
-            io.display("\033[91mYou are a WEREWOLF.\033[0m")
             pack = [name for name, role in state.roles.items() if role == "werewolf" and name != "Player"]
+            lines = ["You are a WEREWOLF."]
             if pack:
-                io.display(f"\033[91mYour fellow pack members are: {', '.join(pack)}\033[0m")
-                io.display("\033[91mDo not attack them. Protect them if they fall under suspicion.\033[0m")
+                lines.append(f"Your fellow pack members are: {', '.join(pack)}")
+                lines.append("Do not attack them. Protect them if they fall under suspicion.")
             else:
-                io.display("\033[91mYou are the lone werewolf. Trust no one.\033[0m")
-            io.display("\033[91mGoal: Deceive the town, survive the voting phase, and eliminate them all.\033[0m")
+                lines.append("You are the lone werewolf. Trust no one.")
+            lines.append("Goal: Deceive the town, survive the voting phase, and eliminate them all.")
         elif player_role == "guardian_angel":
-            io.display("\033[94mYou are the GUARDIAN ANGEL.\033[0m")
-            io.display("\033[94mEach night, you may protect one person from the werewolf attack.\033[0m")
-            io.display("\033[94mYou cannot protect yourself. You cannot protect the same person two nights in a row.\033[0m")
-            io.display("\033[94mGoal: Keep the innocent alive and help the town find the werewolves.\033[0m")
+            lines = [
+                "You are the GUARDIAN ANGEL.",
+                "Each night, you may protect one person from the werewolf attack.",
+                "You cannot protect yourself. You cannot protect the same person two nights in a row.",
+                "Goal: Keep the innocent alive and help the town find the werewolves.",
+            ]
         elif player_role == "coroner":
-            io.display("\033[95mYou are the CORONER.\033[0m")
-            io.display("\033[95mAfter each lynch, you privately learn the true role of the executed person.\033[0m")
-            io.display("\033[95mThe town will NOT see public role reveals while you are alive.\033[0m")
-            io.display("\033[95mGoal: Use your knowledge wisely during discussion to guide the town.\033[0m")
+            lines = [
+                "You are the CORONER.",
+                "After each lynch, you privately learn the true role of the executed person.",
+                "The town will NOT see public role reveals while you are alive.",
+                "Goal: Use your knowledge wisely during discussion to guide the town.",
+            ]
         else:
-            io.display("\033[92mYou are an INNOCENT VILLAGER.\033[0m")
-            io.display("\033[92mGoal: Find the werewolves, convince the town, and vote to lynch them before it's too late.\033[0m")
+            lines = [
+                "You are an INNOCENT VILLAGER.",
+                "Goal: Find the werewolves, convince the town, and vote to lynch them before it's too late.",
+            ]
+
+        io.show_role_reveal_private(player_role, lines)

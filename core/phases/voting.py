@@ -1,7 +1,7 @@
 import time
 from collections import Counter
 
-from core.game_state import GamePhase
+from core.game_state import GamePhase, WIN_MESSAGES
 from core.trust_manager import TrustManager
 
 REVEAL_PAUSE_SECONDS = 1.5
@@ -27,9 +27,7 @@ class VotingPhase:
             npc_vote_results[npc] = gm.npc_controller.generate_vote(npc)
 
         # Reveal
-        io.display("\n\033[36m" + "="*50)
-        io.display("                 THE VERDICT")
-        io.display("="*50 + "\033[0m\n")
+        io.show_phase("THE VERDICT", state.day)
 
         all_votes = {"Player": player_vote}
         self._reveal_player_vote(player_vote)
@@ -41,11 +39,11 @@ class VotingPhase:
         io = self.gm.io
         state = self.gm.state
 
+        io.show_vote("Player", player_vote)
+
         if player_vote == "None":
-            io.display("[Player]: I abstain from voting.")
             state.logical_history.append("Player [neutral] -> Room (Emotion: neutral). Reason: Abstained from voting.")
         else:
-            io.display(f"[Player]: My vote is for {player_vote}.")
             state.logical_history.append(
                 f"Player [vote_lynch] -> {player_vote} (Emotion: angry). Reason: Cast vote for execution."
             )
@@ -62,16 +60,14 @@ class VotingPhase:
             thoughts = vote_data.get("thought_process", "...")
             all_votes[npc] = target
 
-            io.display(f"\033[90m[Thoughts ({npc})]: {thoughts}\033[0m")
+            io.show_vote(npc, target, thoughts=thoughts)
+
             if target == "None":
-                io.display(f"[{npc}]: I... I cannot decide. I abstain.")
                 state.logical_history.append(
                     f"{npc} [neutral] -> Room (Emotion: fearful). Reason: Abstained from voting."
                 )
             else:
-                io.display(f"[{npc}]: My vote is for {target}.")
                 TrustManager.apply_interaction(state, npc, target, "vote_lynch", gm.characters)
-
                 short_reason = (thoughts[:40] + "...") if len(thoughts) > 40 else thoughts
                 state.logical_history.append(
                     f"{npc} [vote_lynch] -> {target} (Emotion: angry). Reason: {short_reason}"
@@ -85,10 +81,8 @@ class VotingPhase:
         io = gm.io
         state = gm.state
 
-        io.display(f"\n\033[36m--- {condemned}'s Final Words ---\033[0m")
-
         if condemned == "Player":
-            last_words = io.prompt("\033[93m[Speak your final words] >\033[0m ")
+            last_words = io.prompt_final_words()
             if last_words.strip():
                 state.chat_history.append(f"[{condemned} -> Room]: {last_words}")
                 state.logical_history.append(
@@ -96,7 +90,7 @@ class VotingPhase:
                 )
         else:
             last_words = gm.npc_controller.generate_final_words(condemned)
-            io.display(f"[{condemned}]: {last_words}")
+            io.show_final_words(condemned, last_words)
             state.chat_history.append(f"[{condemned} -> Room]: {last_words}")
             state.logical_history.append(
                 f"{condemned} [final_words] -> Room (Emotion: desperate). Reason: Last words before execution."
@@ -109,13 +103,12 @@ class VotingPhase:
         io = gm.io
         state = gm.state
 
-        io.display("\n\033[93m--- Final Tally ---\033[0m")
         vote_counts = Counter(all_votes.values())
         if "None" in vote_counts:
             del vote_counts["None"]
 
         if not vote_counts:
-            io.display("The town failed to reach a decision. No one is lynched today.")
+            io.show_system("The town failed to reach a decision. No one is lynched today.", style="warning")
             state.public_events.append(
                 f"Day {state.day} Voting: The town was paralyzed by indecision. No one was hanged."
             )
@@ -123,26 +116,25 @@ class VotingPhase:
             max_votes = max(vote_counts.values())
             tied_characters = [char for char, count in vote_counts.items() if count == max_votes]
 
+            # Show tally
             for char, count in vote_counts.items():
-                io.display(f"{char}: {count} votes")
+                io.show_system(f"{char}: {count} votes", style="muted")
 
             if len(tied_characters) > 1:
-                io.display(
-                    f"\nThere is a tie between {', '.join(tied_characters)}. "
-                    "The town is deadlocked. No one is lynched."
+                io.show_system(
+                    f"There is a tie between {', '.join(tied_characters)}. "
+                    "The town is deadlocked. No one is lynched.", style="warning"
                 )
                 state.public_events.append(f"Day {state.day} Voting: A tie vote occurred. No one was hanged.")
             else:
                 lynched_char = tied_characters[0]
-                io.display(f"\n\033[91mThe town has spoken. {lynched_char} is dragged to the gallows...\033[0m")
+                io.show_death(lynched_char, "lynched")
 
                 # Final words — before execution
                 self._final_words(lynched_char)
 
                 state.alive_characters.remove(lynched_char)
                 state.public_events.append(f"Day {state.day} Voting: {lynched_char} was lynched by the town.")
-
-                # No public role reveal — only the coroner learns the truth
                 state.public_events.append(f"Day {state.day}: {lynched_char} was lynched. Their true allegiance is unknown.")
 
                 if state.is_coroner_alive():
@@ -157,19 +149,21 @@ class VotingPhase:
                     gm.stat_engine.process_coroner_findings(finding)
 
                     if coroner_name == "Player":
-                        io.display(f"\n\033[95m[CORONER INSIGHT] You examine the body: {lynched_char} was {allegiance.upper()}.\033[0m")
+                        io.show_system(
+                            f"CORONER INSIGHT: You examine the body — {lynched_char} was {allegiance.upper()}.",
+                            style="special"
+                        )
 
                 if lynched_char == "Player":
-                    io.display("\n\033[91m[GAME OVER] You have been lynched by the town.\033[0m")
+                    io.show_game_over("player_lynched", "You have been lynched by the town.")
                     state.phase = GamePhase.GAME_OVER
                     return
 
                 result = state.check_win_condition()
                 if result:
-                    from core.game_state import WIN_MESSAGES
-                    io.display(WIN_MESSAGES[result])
+                    io.show_game_over(result, WIN_MESSAGES[result])
                     state.phase = GamePhase.GAME_OVER
                     return
 
-        io.pause("\n\033[90m[Press Enter to end the day] >\033[0m ")
+        io.pause()
         state.phase = GamePhase.NIGHT

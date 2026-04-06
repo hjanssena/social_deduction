@@ -8,7 +8,7 @@
     "discussion": {
         "_docs": "Controls the discussion phase loop. decay_factor: multiplier applied to a speaker's bid weight each time they speak (lower = less likely to speak again soon). max_assertions_per_day: total assertion slots per day. speaker_weight_decay: unused legacy key. chat_history_window: how many recent chat lines the LLM prompts receive. player_min_actions: minimum player actions before silence penalty triggers. player_max_actions: maximum player actions before domination penalty triggers. global_trust_penalty: flat trust penalty applied to the player for being too quiet. silence_under_fire_penalty: trust penalty when the player refuses to defend against a direct accusation.",
         "decay_factor": 0.2,
-        "max_assertions_per_day": 8,
+        "max_assertions_per_day": 6,
         "speaker_weight_decay": 0.25,
         "chat_history_window": 5,
         "player_min_actions": 2,
@@ -132,16 +132,15 @@
         }
     },
     "debug": {
-        "_docs": "Debug display toggles. show_logic: print engine decisions (intent, target, emotion, reasoning) in yellow/gray. show_narrative: print weaver analysis (situation, motivation) before the actor dialogue.",
-        "show_logic": true,
-        "show_narrative": true
+        "_docs": "Debug display toggles. show_logic: print engine decisions (intent, target, emotion, reasoning) in yellow/gray.",
+        "show_logic": true
     },
     "llm": {
         "_docs": "LLM backend configuration. backend: 'llamacpp' for local GGUF or 'ollama' for Ollama API. model_path: path to GGUF file (llamacpp only). chat_format: tokenizer chat template (llamacpp only). model: model name for Ollama. ollama_url: Ollama API endpoint.",
         "backend": "llamacpp",
-        "model_path": "./llms/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf",
-        "chat_format": "chatml",
-        "model": "qwen3.5:cloud",
+        "model_path": "./llms/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+        "chat_format": "qwen",
+        "model": "gpt-oss:20b-cloud",
         "ollama_url": "http://localhost:11434",
         "logic": {
             "_docs": "Sampling parameters for engine/weaver LLM calls (analytical, low creativity). temperature: randomness (low = deterministic). min_p: minimum probability threshold. top_k: consider only top K tokens. repeat_penalty: penalizes token repetition.",
@@ -152,10 +151,11 @@
         },
         "narrative": {
             "_docs": "Sampling parameters for actor LLM calls (creative, expressive dialogue). temperature: randomness (higher = more varied). min_p: minimum probability threshold. top_k: consider only top K tokens. repeat_penalty: penalizes token repetition.",
-            "temperature": 0.8,
-            "min_p": 0.01,
+            "temperature": 1,
+            "min_p": 0.075,
             "top_k": 40,
-            "repeat_penalty": 1.15
+            "top_p": 0.8,
+            "repeat_penalty": 1.05
         }
     }
 }
