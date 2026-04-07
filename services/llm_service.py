@@ -57,7 +57,6 @@ class LLMService(LLMBase):
             "temperature": cfg.get("temperature", 0.3),
             "min_p": cfg.get("min_p", 0.05),
             "top_k": cfg.get("top_k", 40),
-            "top_p": cfg.get("top_p", 0.8),
             "repeat_penalty": cfg.get("repeat_penalty", 1.05),
             "max_tokens": 1024,
         }

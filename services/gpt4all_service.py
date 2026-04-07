@@ -39,11 +39,11 @@ class GPT4AllService(LLMBase):
         kwargs = {
             "temp": cfg.get("temperature", 0.7),
             "top_k": cfg.get("top_k", 40),
-            "top_p": cfg.get("top_p", 0.8),
+            "min_p": cfg.get("min_p", 0.05),
             "repeat_penalty": cfg.get("repeat_penalty", 1.05),
-            "max_tokens": 512,
+            "max_tokens": cfg.get("max_tokens", 256),
         }
         with self.llm.chat_session(system_prompt=system_prompt):
             response = self.llm.generate(user_prompt, **kwargs)
-            
+
         return response.strip()

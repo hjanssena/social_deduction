@@ -27,7 +27,10 @@ class DialoguePrefetcher:
             return None, None
         try:
             result = self._future.result(timeout=timeout)
-        except Exception:
+        except Exception as e:
+            import traceback
+            print(f"\033[91m[Prefetcher] Background generation failed: {e}\033[0m")
+            traceback.print_exc()
             result = None
         meta = self._meta
         self._future = None

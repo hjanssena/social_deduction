@@ -1,5 +1,6 @@
 import json
 import re
+import threading
 from abc import ABC, abstractmethod
 
 
@@ -8,6 +9,7 @@ class LLMBase(ABC):
 
     def __init__(self, config: dict):
         self.config = config.get("llm", {})
+        self._lock = threading.Lock()
 
     @abstractmethod
     def _chat(self, system_prompt: str, user_prompt: str, cfg: dict, json_mode: bool = False) -> str:
@@ -23,7 +25,15 @@ class LLMBase(ABC):
 
     def generate_json(self, system_prompt: str, user_prompt: str, use_narrative_cfg: bool = False) -> dict:
         cfg = self.config.get("narrative" if use_narrative_cfg else "logic", {})
-        response_text = self._chat(system_prompt, user_prompt, cfg, json_mode=True)
+        with self._lock:
+            try:
+                response_text = self._chat(system_prompt, user_prompt, cfg, json_mode=True)
+            except Exception as e:
+                print(f"\033[91m[Error] LLM _chat failed: {e}\033[0m", flush=True)
+                return {}
+        if not response_text or response_text.isspace():
+            print(f"\033[91m[Error] LLM returned empty response.\033[0m")
+            return {}
         response_text = self._sanitize_json_text(response_text)
 
         # Try parsing directly first, then extract if needed
@@ -45,4 +55,10 @@ class LLMBase(ABC):
 
     def generate_text(self, system_prompt: str, user_prompt: str) -> str:
         cfg = self.config.get("narrative", {})
-        return self._chat(system_prompt, user_prompt, cfg, json_mode=False)
+        with self._lock:
+            try:
+                result = self._chat(system_prompt, user_prompt, cfg, json_mode=False)
+                return result if result else ""
+            except Exception as e:
+                print(f"\033[91m[Error] LLM generate_text failed: {e}\033[0m", flush=True)
+                return ""

@@ -9,22 +9,24 @@ label start:
 
     python:
         import bridge
-        import atexit, os, subprocess, time
+        import atexit, os, platform, subprocess, time
 
         # Launch the bundled server if present (packaged distribution).
         # Falls through silently during dev so you can run the server manually.
         _server_proc = None
-        _server_exe = os.path.join(renpy.config.basedir, "game_server", "game_server.exe")
+        _server_ext = ".exe" if platform.system() == "Windows" else ""
+        _server_exe = os.path.join(renpy.config.basedir, "game_server", "game_server" + _server_ext)
         if os.path.isfile(_server_exe):
             _server_cwd = os.path.join(renpy.config.basedir, "game_server")
             _server_log = open(os.path.join(_server_cwd, "server.log"), "w")
-            _server_proc = subprocess.Popen(
-                [_server_exe],
+            _popen_kwargs = dict(
                 cwd=_server_cwd,
                 stdout=_server_log,
                 stderr=_server_log,
-                creationflags=subprocess.CREATE_NO_WINDOW,
             )
+            if platform.system() == "Windows":
+                _popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            _server_proc = subprocess.Popen([_server_exe], **_popen_kwargs)
             # Shut down the server when the game process exits.
             def _shutdown_server():
                 if _server_proc and _server_proc.poll() is None:

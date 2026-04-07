@@ -13,7 +13,7 @@ class IOHandler:
     # ------------------------------------------------------------------
 
     def display(self, text: str):
-        print(text)
+        print(text, flush=True)
 
     def prompt(self, text: str) -> str:
         """Display a prompt and return user input."""

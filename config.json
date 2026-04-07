@@ -121,14 +121,14 @@
         },
         "reveal": {
             "_docs": "Controls role reveal decisions. Checked for ALL alive NPCs between every assertion round (not gated by speaker bids), so probabilities are per-round. pressure_base_chance: per-round probability for a real role holder to counter-reveal when someone claims their role. pressure_ad_divisor: assertion_drive/this is added to the base chance. wolf_pressure_performance_threshold: minimum performance for a wolf to consider counter-claiming under pressure. wolf_pressure_chance_divisor: performance/this = per-round wolf counter-claim probability. ga_voluntary_chance: per-round probability the GA reveals voluntarily when under attack and has protection history. coroner_wolf_finding_chance: per-round probability the coroner reveals when they have werewolf findings. coroner_no_wolf_chance: per-round probability the coroner reveals when they only have non-wolf findings. coroner_under_attack_bonus: added to reveal chance when the coroner is being accused.",
-            "pressure_base_chance": 0.3,
-            "pressure_ad_divisor": 100,
+            "pressure_base_chance": 0.8,
+            "pressure_ad_divisor": 150,
             "wolf_pressure_performance_threshold": 6,
-            "wolf_pressure_chance_divisor": 30,
-            "ga_voluntary_chance": 0.1,
-            "coroner_wolf_finding_chance": 0.08,
-            "coroner_no_wolf_chance": 0.03,
-            "coroner_under_attack_bonus": 0.1
+            "wolf_pressure_chance_divisor": 15,
+            "ga_voluntary_chance": 0.2,
+            "coroner_wolf_finding_chance": 0.40,
+            "coroner_no_wolf_chance": 0.15,
+            "coroner_under_attack_bonus": 0.3
         }
     },
     "debug": {
@@ -138,8 +138,8 @@
     "llm": {
         "_docs": "LLM backend configuration. backend: 'llamacpp' for local GGUF or 'ollama' for Ollama API. model_path: path to GGUF file (llamacpp only). chat_format: tokenizer chat template (llamacpp only). model: model name for Ollama. ollama_url: Ollama API endpoint.",
         "backend": "gpt4all",
-        "model_path": "./llms/qwen2.5-3b-instruct-q8_0.gguf",
-        "chat_format": "qwen",
+        "model_path": "./llms/Llama-3.1-8B-Instruct-Q4_1.gguf",
+        "chat_format": "llama-3",
         "model": "gpt-oss:20b-cloud",
         "ollama_url": "http://localhost:11434",
         "logic": {
@@ -151,10 +151,9 @@
         },
         "narrative": {
             "_docs": "Sampling parameters for actor LLM calls (creative, expressive dialogue). temperature: randomness (higher = more varied). min_p: minimum probability threshold. top_k: consider only top K tokens. repeat_penalty: penalizes token repetition.",
-            "temperature": 1.1,
-            "min_p": 0.075,
+            "temperature": 0.85,
+            "min_p": 0.05,
             "top_k": 40,
-            "top_p": 0.8,
             "repeat_penalty": 1.05
         }
     }

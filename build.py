@@ -1,25 +1,26 @@
 """
-build.py — Village of Shadows packaging script.
+build.py — Village of Shadows packaging script (cross-platform).
 
 Usage:
     python build.py 0.2.0
-    python build.py 0.2.0 --renpy-sdk "C:/path/to/renpy-sdk"
+    python build.py 0.2.0 --renpy-sdk "/path/to/renpy-sdk"
     python build.py 0.2.0 --skip-renpy          # skip Ren'Py build
-    python build.py 0.2.0 --skip-installer       # skip Inno Setup step
+    python build.py 0.2.0 --skip-installer       # skip Inno Setup step (Windows only)
 
 Prerequisites:
     pip install pyinstaller
-    Inno Setup 6 installed (https://jrsoftware.org/isinfo.php)
     Ren'Py SDK (https://www.renpy.org/latest.html) — only needed for --renpy-sdk
+    Inno Setup 6 (Windows only, https://jrsoftware.org/isinfo.php)
 
 Outputs:
     dist/game_server/           PyInstaller bundle
     dist/VillageOfShadows-<v>-pc/   Ren'Py build (if built)
-    dist/VillageOfShadows-<v>-Setup.exe   Installer (if built)
+    dist/VillageOfShadows-<v>-Setup.exe   Installer (Windows only, if built)
 """
 
 import argparse
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -28,13 +29,24 @@ import textwrap
 import zipfile
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-# Python 3.11 venv — required for GPT4All compatibility.
-PYTHON311 = os.path.join(ROOT, "venv311", "Scripts", "python.exe")
+IS_WINDOWS = platform.system() == "Windows"
+IS_LINUX = platform.system() == "Linux"
+
+# Locate the build Python.  On Windows we need a 3.11 venv for GPT4All compat;
+# on Linux the system / active venv Python is fine.
+if IS_WINDOWS:
+    PYTHON_BUILD = os.path.join(ROOT, "venv311", "Scripts", "python.exe")
+else:
+    PYTHON_BUILD = os.path.join(ROOT, "virtenv", "bin", "python")
+
 RENPY_PROJECT = os.path.join(ROOT, "renpy_client")
 OPTIONS_RPY = os.path.join(RENPY_PROJECT, "game", "options.rpy")
 VERSION_FILE = os.path.join(ROOT, "VERSION")
 DIST = os.path.join(ROOT, "dist")
 INNO_COMPILER = r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+
+EXE_EXT = ".exe" if IS_WINDOWS else ""
+SERVER_EXE_NAME = f"game_server{EXE_EXT}"
 
 
 # ---------------------------------------------------------------------------
@@ -71,14 +83,26 @@ def update_options_rpy(version: str):
 # ---------------------------------------------------------------------------
 
 def build_server():
-    """Run PyInstaller using game_server.spec, via the Python 3.11 venv."""
-    if not os.path.isfile(PYTHON311):
-        raise FileNotFoundError(
-            f"Python 3.11 venv not found at {PYTHON311}. "
-            "Create it with: py -3.11 -m venv venv311 && venv311\\Scripts\\pip install -r requirements.txt"
-        )
+    """Run PyInstaller using game_server.spec (or auto-generate), via the build Python."""
+    if not os.path.isfile(PYTHON_BUILD):
+        if IS_WINDOWS:
+            hint = "Create it with: py -3.11 -m venv venv311 && venv311\\Scripts\\pip install -r requirements.txt"
+        else:
+            hint = "Create it with: python -m venv virtenv && virtenv/bin/pip install -r requirements.txt"
+        raise FileNotFoundError(f"Build Python not found at {PYTHON_BUILD}. {hint}")
+
     spec = os.path.join(ROOT, "game_server.spec")
-    run([PYTHON311, "-m", "PyInstaller", "--noconfirm", spec], cwd=ROOT)
+    if os.path.isfile(spec):
+        run([PYTHON_BUILD, "-m", "PyInstaller", "--noconfirm", spec], cwd=ROOT)
+    else:
+        # Auto-generate a basic PyInstaller invocation
+        print("No game_server.spec found — running PyInstaller with default options.")
+        run([
+            PYTHON_BUILD, "-m", "PyInstaller",
+            "--noconfirm", "--name", "game_server",
+            "--collect-all", "llama_cpp",
+            "server_entry.py",
+        ], cwd=ROOT)
 
     server_dist = os.path.join(DIST, "game_server")
 
@@ -86,22 +110,23 @@ def build_server():
     shutil.copy(os.path.join(ROOT, "config.json"), server_dist)
     print(f"config.json copied to {server_dist}")
 
-    # gpt4all's _pyllmodel.py tries libllmodel.dll first, falls back to llmodel.dll.
-    # PyInstaller's ctypes hook raises PyInstallerImportError (not OSError) so the
-    # fallback never runs. Fix: create libllmodel.dll as a copy of llmodel.dll.
-    gpt4all_build = os.path.join(server_dist, "_internal", "gpt4all", "llmodel_DO_NOT_MODIFY", "build")
-    llmodel = os.path.join(gpt4all_build, "llmodel.dll")
-    libllmodel = os.path.join(gpt4all_build, "libllmodel.dll")
-    if os.path.isfile(llmodel) and not os.path.isfile(libllmodel):
-        shutil.copy(llmodel, libllmodel)
-        print(f"Created libllmodel.dll alias in {gpt4all_build}")
+    # GPT4All DLL fix (Windows only): create libllmodel.dll alias
+    if IS_WINDOWS:
+        gpt4all_build = os.path.join(server_dist, "_internal", "gpt4all", "llmodel_DO_NOT_MODIFY", "build")
+        llmodel = os.path.join(gpt4all_build, "llmodel.dll")
+        libllmodel = os.path.join(gpt4all_build, "libllmodel.dll")
+        if os.path.isfile(llmodel) and not os.path.isfile(libllmodel):
+            shutil.copy(llmodel, libllmodel)
+            print(f"Created libllmodel.dll alias in {gpt4all_build}")
 
     # Copy llms/ next to the exe so config.json's ./llms/ path resolves correctly.
+    llms_src = os.path.join(ROOT, "llms")
     llms_dst = os.path.join(server_dist, "llms")
-    if os.path.exists(llms_dst):
-        shutil.rmtree(llms_dst)
-    shutil.copytree(os.path.join(ROOT, "llms"), llms_dst)
-    print(f"llms/ copied to {llms_dst}")
+    if os.path.isdir(llms_src):
+        if os.path.exists(llms_dst):
+            shutil.rmtree(llms_dst)
+        shutil.copytree(llms_src, llms_dst)
+        print(f"llms/ copied to {llms_dst}")
 
 
 def build_renpy(renpy_sdk: str, version: str):
@@ -110,14 +135,19 @@ def build_renpy(renpy_sdk: str, version: str):
     After building, extracts the pc zip and copies game_server/ inside so
     Ren'Py's script.rpy can find and launch it via renpy.config.basedir.
     """
-    renpy_exe = os.path.join(renpy_sdk, "renpy.exe")
-    if not os.path.isfile(renpy_exe):
-        renpy_exe = os.path.join(renpy_sdk, "renpy.sh")
-    if not os.path.isfile(renpy_exe):
+    # Find the Ren'Py executable (platform-aware)
+    renpy_exe = None
+    for candidate in ["renpy.exe", "renpy.sh", "renpy"]:
+        path = os.path.join(renpy_sdk, candidate)
+        if os.path.isfile(path):
+            renpy_exe = path
+            break
+
+    if renpy_exe is None:
         print(f"WARNING: renpy executable not found in {renpy_sdk}, skipping Ren'Py build.")
         return
 
-    # Syntax: renpy.exe <sdk-launcher> distribute <project> --destination <dest>
+    # Syntax: renpy <sdk-launcher> distribute <project> --destination <dest>
     sdk_launcher = os.path.join(renpy_sdk, "launcher")
     os.makedirs(DIST, exist_ok=True)
     run([renpy_exe, sdk_launcher, "distribute", RENPY_PROJECT, "--destination", DIST])
@@ -162,7 +192,12 @@ def build_renpy(renpy_sdk: str, version: str):
 
 
 def build_installer(version: str, has_renpy: bool):
-    """Generate an Inno Setup .iss file and compile it."""
+    """Generate an Inno Setup .iss file and compile it (Windows only)."""
+    if not IS_WINDOWS:
+        print("Skipping Inno Setup installer (not on Windows).")
+        _build_linux_archive(version, has_renpy)
+        return
+
     if not os.path.isfile(INNO_COMPILER):
         print(f"WARNING: Inno Setup not found at {INNO_COMPILER}, skipping installer.")
         return
@@ -232,6 +267,30 @@ def build_installer(version: str, has_renpy: bool):
     print(f"\nInstaller: {os.path.join(output_dir, output_name)}.exe")
 
 
+def _build_linux_archive(version: str, has_renpy: bool):
+    """On Linux, create a .tar.gz archive instead of an installer."""
+    renpy_dist = os.path.join(DIST, f"VillageOfShadows-{version}-pc")
+    server_dist = os.path.join(DIST, "game_server")
+
+    if has_renpy and os.path.isdir(renpy_dist):
+        archive_src = renpy_dist
+    elif os.path.isdir(server_dist):
+        archive_src = server_dist
+    else:
+        print("WARNING: nothing to archive.")
+        return
+
+    archive_name = f"VillageOfShadows-{version}-linux"
+    archive_path = os.path.join(DIST, archive_name)
+
+    import tarfile
+    tar_path = archive_path + ".tar.gz"
+    print(f"Creating {tar_path}")
+    with tarfile.open(tar_path, "w:gz") as tar:
+        tar.add(archive_src, arcname=archive_name)
+    print(f"Archive: {tar_path}")
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -242,13 +301,13 @@ def main():
     parser.add_argument("--renpy-sdk", metavar="PATH", help="Path to Ren'Py SDK root")
     parser.add_argument("--skip-server", action="store_true", help="Skip PyInstaller step")
     parser.add_argument("--skip-renpy", action="store_true", help="Skip Ren'Py build step")
-    parser.add_argument("--skip-installer", action="store_true", help="Skip Inno Setup step")
+    parser.add_argument("--skip-installer", action="store_true", help="Skip installer/archive step")
     args = parser.parse_args()
 
     version = args.version
     has_renpy_sdk = bool(args.renpy_sdk) and not args.skip_renpy
 
-    print(f"\n=== Building Village of Shadows v{version} ===\n")
+    print(f"\n=== Building Village of Shadows v{version} ({platform.system()}) ===\n")
 
     # 1. Update version strings
     update_version_file(version)
@@ -266,11 +325,11 @@ def main():
     else:
         print("Skipping Ren'Py build (no --renpy-sdk provided or --skip-renpy set).")
 
-    # 4. Inno Setup installer
+    # 4. Installer (Windows) or archive (Linux)
     if not args.skip_installer:
         build_installer(version, has_renpy=has_renpy_sdk)
     else:
-        print("Skipping installer build.")
+        print("Skipping installer/archive build.")
 
     print(f"\n=== Done: v{version} ===")
 
