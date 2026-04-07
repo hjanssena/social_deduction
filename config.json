@@ -137,9 +137,9 @@
     },
     "llm": {
         "_docs": "LLM backend configuration. backend: 'llamacpp' for local GGUF or 'ollama' for Ollama API. model_path: path to GGUF file (llamacpp only). chat_format: tokenizer chat template (llamacpp only). model: model name for Ollama. ollama_url: Ollama API endpoint.",
-        "backend": "llamacpp",
-        "model_path": "./llms/Mistral-NeMo-Minitron-8B-Instruct-Q4_K_M.gguf",
-        "chat_format": "chatml",
+        "backend": "gpt4all",
+        "model_path": "./llms/qwen2.5-3b-instruct-q8_0.gguf",
+        "chat_format": "qwen",
         "model": "gpt-oss:20b-cloud",
         "ollama_url": "http://localhost:11434",
         "logic": {

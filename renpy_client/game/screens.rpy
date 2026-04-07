@@ -115,6 +115,30 @@ screen final_words_input():
                 textbutton "Say Nothing" action Return("")
 
 
+## ---------- Confirm / yes-no dialog (required by Ren'Py 8 for quit, etc.) ----------
+screen confirm(message, yes_action, no_action=None):
+    modal True
+
+    frame:
+        xalign 0.5
+        yalign 0.5
+        xpadding 40
+        ypadding 30
+
+        vbox:
+            spacing 20
+            xalign 0.5
+
+            text message size 22 xalign 0.5 text_align 0.5
+
+            hbox:
+                spacing 30
+                xalign 0.5
+
+                textbutton "Yes" action yes_action
+                textbutton "No"  action (no_action if no_action else Hide("confirm"))
+
+
 ## ---------- Generic text input ----------
 screen generic_input(prompt_text):
     modal True

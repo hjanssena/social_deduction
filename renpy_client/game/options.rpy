@@ -1,7 +1,7 @@
 ## Basic Ren'Py project options.
 
 define config.name = _("Village of Shadows")
-define config.version = "0.1"
+define config.version = "0.0.1"
 
 define gui.show_name = True
 define gui.about = _("")

@@ -1,0 +1,11 @@
+ # Full build (with Ren'Py SDK)
+  python build.py 0.2.0 --renpy-sdk "C:/path/to/renpy-8.x"
+
+  # Server + installer only (no Ren'Py)
+  python build.py 0.2.0 --skip-renpy
+
+  # Bump version strings only, skip all builds
+  python build.py 0.2.0 --skip-server --skip-renpy --skip-installer
+
+  # Re-run installer after fixing something, skip rebuilds
+  python build.py 0.2.0 --skip-server --skip-renpy

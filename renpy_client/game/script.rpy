@@ -9,21 +9,42 @@ label start:
 
     python:
         import bridge
+        import atexit, os, subprocess, time
+
+        # Launch the bundled server if present (packaged distribution).
+        # Falls through silently during dev so you can run the server manually.
+        _server_proc = None
+        _server_exe = os.path.join(renpy.config.basedir, "game_server", "game_server.exe")
+        if os.path.isfile(_server_exe):
+            _server_cwd = os.path.join(renpy.config.basedir, "game_server")
+            _server_log = open(os.path.join(_server_cwd, "server.log"), "w")
+            _server_proc = subprocess.Popen(
+                [_server_exe],
+                cwd=_server_cwd,
+                stdout=_server_log,
+                stderr=_server_log,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+            # Shut down the server when the game process exits.
+            def _shutdown_server():
+                if _server_proc and _server_proc.poll() is None:
+                    _server_proc.terminate()
+            atexit.register(_shutdown_server)
 
     "Connecting to game server..."
 
     python:
+        connection_ok = False
+        connection_err = ""
         try:
             game_info = bridge.start_game()
             player_role = game_info.get("roles", {}).get("Player", "villager")
             connection_ok = True
         except Exception as e:
-            connection_ok = False
             connection_err = str(e)
 
     if not connection_ok:
         "Failed to connect: [connection_err]"
-        "Make sure the server is running: uvicorn server.app:app"
         return
 
     "Connected. You are a [player_role]."

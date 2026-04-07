@@ -33,20 +33,32 @@ _event_q = queue.Queue()
 _running = False
 
 
-def _post(path, data=None):
+def _post(path, data=None, timeout=60):
     """POST JSON to the server and return the parsed response."""
     url = SERVER_URL + path
     body = json.dumps(data or {}).encode("utf-8")
     req = Request(url, data=body, headers={"Content-Type": "application/json"})
-    with urlopen(req, timeout=60) as resp:
+    with urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _get(path):
+def _get(path, timeout=60):
     """GET from the server and return the parsed response."""
     url = SERVER_URL + path
-    with urlopen(url, timeout=60) as resp:
+    with urlopen(url, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+
+def wait_for_server(retries=120, interval=1):
+    """Block until /health responds. Raises RuntimeError if it never comes up."""
+    import time
+    for _ in range(retries):
+        try:
+            _get("/health", timeout=2)
+            return
+        except Exception:
+            time.sleep(interval)
+    raise RuntimeError(f"Game server did not respond after {retries}s.")
 
 
 def _poll_loop():
@@ -65,9 +77,10 @@ def _poll_loop():
 
 
 def start_game():
-    """POST /game/start, then begin polling for events."""
+    """Wait for the server, POST /game/start, then begin polling for events."""
     global _running
-    result = _post("/game/start")
+    wait_for_server()
+    result = _post("/game/start", timeout=300)  # LLM load can take a while
     _running = True
     t = threading.Thread(target=_poll_loop, daemon=True)
     t.start()

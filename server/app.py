@@ -28,6 +28,12 @@ from core.game_master import GameMaster
 
 app = FastAPI(title="Social Deduction Game Server")
 
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -135,3 +141,8 @@ def game_state():
         "public_events": state.public_events[-10:],
         "chat_history": state.chat_history[-20:],
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
