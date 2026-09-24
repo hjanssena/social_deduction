@@ -1,4 +1,4 @@
-"""Shared character definitions used by both the CLI entrypoint and the server."""
+"""Character definitions used by the CLI entrypoint."""
 
 RAW_CHARACTER_DATA = [
     {

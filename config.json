@@ -136,12 +136,24 @@
         "show_logic": false
     },
     "llm": {
-        "_docs": "LLM backend configuration. backend: 'llamacpp' for local GGUF or 'ollama' for Ollama API. model_path: path to GGUF file (llamacpp only). chat_format: tokenizer chat template (llamacpp only). model: model name for Ollama. ollama_url: Ollama API endpoint.",
+        "_docs": "LLM backend configuration. backend: 'llamacpp' for local GGUF, 'gpt4all' for local GGUF via GPT4All, 'ollama' for Ollama API, or 'openai' for any OpenAI-compatible API. model_path: path to GGUF file (llamacpp/gpt4all). chat_format: tokenizer chat template (llamacpp only). model: model name for Ollama. ollama_url: Ollama API endpoint. openai: settings for the 'openai' backend.",
         "backend": "gpt4all",
         "model_path": "./llms/Llama-3.1-8B-Instruct-Q4_1.gguf",
         "chat_format": "llama-3",
         "model": "gpt-oss:20b-cloud",
         "ollama_url": "http://localhost:11434",
+        "openai": {
+            "_docs": "OpenAI-compatible Chat Completions backend. The API key is read from the OPENAI_API_KEY environment variable. base_url: API root including /v1 (e.g. https://api.openai.com/v1, https://openrouter.ai/api/v1, http://localhost:1234/v1 for LM Studio). model: model name as the provider expects it. json_mode: send response_format=json_object for JSON calls (disable if the server rejects it). extended_sampling: also send top_k/min_p/repeat_penalty (local servers only; strict providers reject them). max_tokens_field: 'max_tokens', or 'max_completion_tokens' for newer OpenAI models. max_tokens: response length cap. timeout: request timeout in seconds. auth_header: header that carries the API key; 'Authorization' sends 'Bearer <key>' (OpenAI standard), any other name (e.g. 'x-api-key') sends the raw key. reasoning: true/false turns model thinking on/off via chat_template_kwargs.enable_thinking (llama.cpp-based servers with Qwen3, DeepSeek-R1, etc.); null sends nothing and uses the server default (required for OpenAI itself, which rejects the field).",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-4o-mini",
+            "auth_header": "Authorization",
+            "reasoning": null,
+            "json_mode": true,
+            "extended_sampling": false,
+            "max_tokens_field": "max_tokens",
+            "max_tokens": 512,
+            "timeout": 120
+        },
         "logic": {
             "_docs": "Sampling parameters for engine/weaver LLM calls (analytical, low creativity). temperature: randomness (low = deterministic). min_p: minimum probability threshold. top_k: consider only top K tokens. repeat_penalty: penalizes token repetition.",
             "temperature": 0.1,

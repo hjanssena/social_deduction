@@ -1,0 +1,15 @@
+[project]
+name = "social-deduction"
+version = "0.0.1"
+description = "Werewolf-style social deduction game with LLM-voiced NPCs (CLI)."
+requires-python = ">=3.12"
+dependencies = [
+    "gpt4all>=2.8.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+llamacpp = [
+    "llama-cpp-python>=0.3.0",
+]

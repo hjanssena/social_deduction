@@ -3,9 +3,8 @@ class IOHandler:
 
     Structured methods (show_dialogue, show_vote, prompt_menu, etc.) provide typed
     data to the frontend.  The default implementations format text with ANSI colors
-    and delegate to the three base methods, keeping the CLI experience unchanged.
-    Subclasses (e.g. ServerIOHandler) override the structured methods to produce
-    typed events instead.
+    and delegate to the three base methods.  Subclasses (e.g. a scripted test
+    handler) can override the structured methods to capture typed data instead.
     """
 
     # ------------------------------------------------------------------
