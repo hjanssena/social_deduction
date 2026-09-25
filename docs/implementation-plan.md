@@ -25,6 +25,10 @@ Target design: [`game-loop.md`](game-loop.md). Each milestone leaves the game pl
 | 15 | Guardian Angel claims are fixed along the way (milestone 2). |
 | 16 | Every character has their own color: their name and their lines are always painted in it. Informational messages stay light yellow. |
 | 17 | Out of scope: rumours between NPCs, and a notes feature (the Player can keep their own notes). |
+| 18 | The discussion runs as **threads**, one topic at a time, instead of assertions with reactions; the engine picks every speaker ([`discussion-threads.md`](discussion-threads.md)). |
+| 19 | A day keeps its length: the budget is spoken lines (`turns_per_day`), not a number of threads. |
+| 20 | Validate the thread model before adding to it: changing topic mid-thread (`/new`) waits until then. |
+| 21 | Thread markers (topic and how it ended) are a debug flag, `debug.show_threads`. |
 
 ## Ground rules
 

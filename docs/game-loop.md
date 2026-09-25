@@ -49,52 +49,54 @@ flowchart TD
 
 ## Discussion loop (current implementation)
 
+The day's discussion runs as **threads**, one topic at a time. The engine (`core/discussion_director.py`) picks
+every speaker; the LLM decides what they say or whether they pass. Design and measurements:
+[`discussion-threads.md`](discussion-threads.md).
+
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 420}}}%%
 flowchart TD
-    begin(["Discussion phase starts"]) --> day{"Day 1 or later?"}
-    day -- yes --> morning["Condense yesterday's chat into a summary (1 LLM call)<br/>Morning reports from anyone who already claimed a role"]
-    day -- no --> primer
-    morning --> primer["Town crier primer added to the chat history"]
-    primer --> slot{"Assertion slots left?<br/>max_assertions_per_day"}
-
-    slot -- no --> silence["Player silence penalty if too quiet"]
+    begin(["Discussion phase starts"]) --> morning["Condense yesterday's chat into a summary<br/>Morning reports from anyone who already claimed a role<br/>(reports go into EARLIER TODAY)"]
+    morning --> primer["Town crier primer"]
+    primer --> budget{"Spoken lines left today?<br/>turns_per_day"}
+    budget -- no --> silence["Player silence penalty if too quiet"]
     silence --> toVote(["Voting phase"])
 
-    slot -- yes --> input{"Player typed an assertion?"}
-    input -- yes --> parse["Discard any prefetched NPC line<br/>LLM parser turns the Player's text into intent and target<br/>Recorded in the public record"]
-    input -- "no: Enter" --> ready{"Next NPC line already prefetched?"}
-    ready -- yes --> usePre["Use the prefetched line"]
-    ready -- no --> gen["Pick a speaker by assertion_drive with decay<br/>Generate the line now"]
-    usePre --> commit
-    gen --> commit["Commit: public record, trust and suspicion updates<br/>Show the line"]
+    budget -- yes --> claim{"Role claim due?<br/>(engine reveal check)"}
+    claim -- yes --> openClaim["The claim opens the thread (LLM line)"]
+    claim -- no --> pOpen{"Player types a new topic?"}
+    pOpen -- yes --> openPlayer["The Player's line opens the thread (parsed for intent and target)"]
+    pOpen -- no --> openNpc["Opener picked by drive with decay (boost: accused and silent)<br/>OPEN prompt: not the topic just closed, nothing on EARLIER TODAY"]
+    openClaim --> commit
+    openPlayer --> commit
+    openNpc --> commit
 
-    subgraph assertCall ["Assertion LLM call (NPCController.generate_assertion)"]
-        ctx["Prompt: role and goal, voice, logbook<br/>Situation, living roster tagged by relation, role claims<br/>Today's public record, last chat lines, what concerns you<br/>Day guidance: day 0 means probe, don't accuse"]
-        ctx --> json["Model returns thought, intent, target, emotion, dialogue"]
-        json --> validate["Validate: known intent, living target that isn't the speaker,<br/>target recovered from the line if missing<br/>Near-repeat of the speaker's own line leads to one retry"]
+    commit["Commit: chat history, public record, trust, suspicion<br/>Thread notes who owes an answer"] --> over{"Thread over?<br/>turn cap, 2 passes in a row, budget<br/>(a last question still gets its answer)"}
+    over -- yes --> close["Summary line into EARLIER TODAY<br/>Prefetch the next opener"]
+    close --> budget
+
+    over -- no --> join{"Player joins in?"}
+    join -- yes --> pTurn["The Player's line joins the thread;<br/>whoever they ask or accuse answers next"]
+    pTurn --> commit
+    join -- no --> next{"Next speaker (director)"}
+    next -- "owes an answer: an NPC" --> answer["ANSWER prompt: the line to answer, quoted"]
+    next -- "owes an answer: the Player" --> forced["Forced prompt, once per thread;<br/>silence goes on the record"]
+    next -- "has a stake (named, targeted, friend or packmate)" --> joinNpc["JOIN prompt: add something new, or pass"]
+    next -- "nobody" --> close
+    answer --> commit
+    forced --> commit
+    joinNpc --> passed{"Passed?"}
+    passed -- yes --> over
+    passed -- no --> commit
+
+    subgraph turnCall ["Turn LLM call (NPCController.take_turn)"]
+        ctx["Prompt: role and goal, voice, logbook<br/>Situation, living roster tagged by relation, role claims<br/>EARLIER TODAY (reports, one line per closed thread)<br/>THIS CONVERSATION (the current thread, in order), what concerns you"]
+        ctx --> json["Model returns thought, intent, target, emotion, dialogue (+ topic when opening)"]
+        json --> validate["Validate: known intent, living target, target recovered from the line<br/>Near-repeat of the speaker's own line or anyone's line in the thread: one retry"]
     end
-    gen -. "generates with" .-> ctx
-    prefetch -. "generates with" .-> ctx
-
-    parse --> queue
-    commit --> queue["Reaction queue: the target first,<br/>then the target's friends and packmates, then others with a stake,<br/>then 1 random bystander, capped at max_reactions_per_assertion"]
-    queue --> rLoop{"Anyone left in the queue?"}
-    rLoop -- yes --> pReact["Player may react: parsed and recorded"]
-    pReact --> react["Next reactor: prefetched or generated now<br/>Same prompt, plus the triggering line and earlier replies<br/>May choose silent"]
-    react --> silent{"Silent?"}
-    silent -- yes --> rLoop
-    silent -- no --> showR["Commit and show the reaction<br/>Prefetch the next reactor"]
-    showR --> rLoop
-
-    rLoop -- no --> forced{"Player targeted and hasn't answered?"}
-    forced -- yes --> forcedPrompt["Forced prompt: staying silent costs trust"]
-    forced -- no --> reveals
-    forcedPrompt --> reveals
-
-    reveals["Role claim check (engine)<br/>Pressure reveals, counter-claims, voluntary Guardian Angel and Coroner claims,<br/>wolf fake claims with made-up findings<br/>Each reveal: LLM line, then rescan, since a claim can trigger a counter-claim"]
-    reveals --> prefetch["Prefetch the next NPC assertion in the background"]
-    prefetch --> slot
+    openNpc -. "generates with" .-> ctx
+    answer -. "generates with" .-> ctx
+    joinNpc -. "generates with" .-> ctx
 ```
 
 ## Decisions
@@ -126,4 +128,5 @@ flowchart TD
 | **Constant abstaining makes wolves win by attrition.** | Abstain only if the voter truly suspects no one. The bickering after a no-hang day raises the pressure for the next day. |
 | **A wolf fake-claims the save after a quiet night.** The wolves know exactly who they attacked, which makes the lie strong. | This is intended. The real Guardian Angel can counter-claim, and the existing duplicate-claim suspicion applies to both. |
 | **Latency: every LLM call takes about 8s on the test server.** | Votes run while the Player votes. Compaction and the crime scene run while the morning text is shown. Discussion lines are prefetched. Group calls (votes, pack, Guardian Angel) replace per-character calls. |
+| **The discussion drifts:** replies wander off, new rounds only continue the last one, questions go unanswered. | Threads: one topic at a time, whoever is asked answers next, joiners see only the current exchange and may pass, openers are told which topic just closed. Measured by `scripts/probe.py --metrics`. |
 | **The model returns a bad answer**, such as an illegal vote, an unknown name or malformed JSON. | Every decision is validated. Illegal votes get one retry that names the mistake, then the stat engine stands in. `DEBUG_SHOW_LOGIC` shows the raw answer whenever it falls back. |
