@@ -45,7 +45,7 @@ class ArrivalPhase:
             if said:
                 transcript.append(f"[{TRAVELER}]: {said}")
                 gm.record_action("Player", "neutral", name, dialogue=said)
-                reply = conv.reply(name, transcript, private=False)
+                reply, _ = conv.reply(name, transcript, private=False, last=True)  # one exchange each
                 io.show_dialogue(name, "Player", reply)
                 transcript.append(f"[{name}]: {reply}")
             else:
