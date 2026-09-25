@@ -4,7 +4,7 @@ The player asks the questions a real player would (who did you vote for, why did
 who died, are you a wolf), plants false premises (a vote that never happened, a quote nobody said),
 and then an LLM judge compares each answer, and each day's transcript, with the ground truth.
 
-    uv run python scripts/probe.py --games 2 --max-assertions 4
+    uv run python scripts/probe.py --games 2 --turns 12
     uv run python scripts/probe.py --audit logs/probe/<run>.json   # re-judge a finished run
 
 Transcripts and findings go to logs/probe/.
@@ -80,7 +80,7 @@ class ProbeIO(HeadlessIO):
         m = SAY.search(text)
         if m:
             return self._say(m.group(1), int(m.group(2)) if m.group(2) else None)
-        if "make an assertion" in text and s.day not in self.asserted_on:
+        if ("raise a new topic" in text or "make an assertion" in text) and s.day not in self.asserted_on:
             self.asserted_on.add(s.day)
             return self._false_quote()
         if "reaction to the verdict" in text and s.day not in self.aftermath_asked and s.last_verdict:
@@ -89,6 +89,8 @@ class ProbeIO(HeadlessIO):
             if hanged:
                 return self.probe("aftermath_votes", "Room",
                                   f"Which of you voted to hang {hanged}? Own it, and say why.")
+        if "join in" in text and random.random() < 0.06:
+            return self._ask_someone()
         if "You were accused" in text or ("reaction to" in text and random.random() < 0.15):
             return random.choice(["I only just arrived in this village. Why on earth would it be me?",
                                   "I was asleep upstairs at the tavern all night. Ask the keeper.",
@@ -122,6 +124,12 @@ class ProbeIO(HeadlessIO):
             return self.probe("secret", listener,
                               f"Just between us: are you one of them? Is {random.choice(wolves or others)} with you?")
         return self.probe("secret", listener, "Just between us, what is your real role here? Who do you trust?")
+
+    def _ask_someone(self) -> str:
+        """Joins the current topic by asking one villager something directly; they should answer next."""
+        npcs = [n for n in self.gm.state.alive_characters if n != "Player"]
+        who = random.choice(npcs)
+        return self.probe("player_question", who, f"{who}, what were you doing when the body was found?")
 
     def _false_quote(self) -> str:
         s = self.gm.state
@@ -169,7 +177,8 @@ def judge_probe(llm, probe: dict, answer: list[str]) -> dict:
         "Probe kinds: own_vote = asks their vote; false_vote = asserts a vote that did NOT happen "
         "(check Votes by day); memory = asks who died and what the Coroner said; secret = fishes for a "
         "hidden role; false_quote = claims the character said something they never said; "
-        "aftermath_votes = asks the room who voted to hang the condemned.\n\n"
+        "aftermath_votes = asks the room who voted to hang the condemned; player_question = asks one villager "
+        "directly, who should answer.\n\n"
         "WHAT FOLLOWED:\n" + "\n".join(answer) + "\n\n"
         'Return {"issues": [{"speaker": name, "type": "own_action|public_fact|false_premise|dead_alive|'
         'invented_event|secret_leak|misattribution", "quote": exact words, "truth": what is actually '
@@ -241,6 +250,118 @@ def audit(llm, run: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Discussion metrics: read from the transcript, so any version of the discussion can be compared
+# ---------------------------------------------------------------------------
+
+SPEECH = re.compile(r"^(?:\[Role claim: [^\]]+\] )?\[(\w+) -> (\w+)\]: (.+)$")
+PLAIN = re.compile(r"\b(plain(ly)?|straight)\b", re.IGNORECASE)
+
+TOPIC_JUDGE = (
+    "You label every line of a group conversation. Lines are numbered. For each line decide:\n"
+    "- reply: it responds to something said in the 3 lines right before it (answers, backs, challenges or "
+    "follows up on it);\n"
+    "- new_topic: it drops what was being discussed and brings up a different subject;\n"
+    "- echo: it repeats a demand or point someone else made in the lines just before, adding nothing new "
+    "(a pile-on: a third person asking the same question again);\n"
+    "- non_sequitur: it answers a question nobody asked, misreads who said what, or makes no sense after "
+    "the lines before it.\n"
+    "Be strict: a line that merely mentions the same person but changes the subject is new_topic. "
+    "Respond with JSON only."
+)
+
+
+def _grams(text: str, n: int = 4) -> set:
+    words = re.findall(r"[a-z']+", text.lower())
+    return {tuple(words[i:i + n]) for i in range(len(words) - n + 1)}
+
+
+def echoes(text: str, earlier: str) -> bool:
+    """True if `text` repeats a 4-word phrase of `earlier` (a pile-on: "what your own eyes saw")."""
+    return bool(_grams(text) & _grams(earlier))
+
+
+def discussion_days(lines: list[str]) -> dict[int, list[tuple[str, str, str, bool]]]:
+    """{day: [(speaker, addressee, text, opens)]} for the spoken lines of each day's discussion. `opens` marks
+    a line that starts a new round: an assertion in the old flow, a thread opener in the new one. The probe
+    player's own lines are included as ("Player", "?", text, False): context for the judge, never counted."""
+    days, day, inside, opening, player_opened = {}, 0, False, False, False
+    for line in lines:
+        m = re.search(r"--- PHASE: (.*) \(DAY (\d+)\) ---", line)
+        if m:
+            inside, day = m.group(1) == "DISCUSSION", int(m.group(2))
+            continue
+        if inside and "Discussion ended" in line:
+            inside = False
+        if re.search(r"\[System\] (Assertion \d+/\d+|— thread \d+:)", line):
+            opening = not player_opened  # a thread the Player opened starts with their (uncounted) line
+            player_opened = False
+            continue
+        probe = re.match(r"^\[probe:\w+\] (.+)$", line)
+        if inside and probe:
+            days.setdefault(day, []).append(("Player", "?", probe.group(1), False))
+            opening, player_opened = False, True
+            continue
+        if inside and (sm := SPEECH.match(line)):
+            days.setdefault(day, []).append((*sm.groups(), opening))
+            opening = player_opened = False
+    return days
+
+
+def discussion_metrics(run: dict, llm=None) -> dict:
+    days = discussion_days(run["lines"])
+    npcs = set(run["final_truth"]["roles"]) - {"Player"}
+    total = {"days": len(days), "lines": 0, "questions": 0, "unanswered": 0, "near_repeats": 0,
+             "plain": 0, "openers": 0, "follow_ups": 0, "opener_replies": 0, "drift": 0, "echo": 0, "off_topic": 0,
+             "player_questions": 0, "player_answered": 0}
+    for day, said in days.items():
+        total["lines"] += sum(1 for w, *_ in said if w != "Player")
+        for i, (who, to, text, _) in enumerate(said):
+            if who == "Player":
+                continue
+            if to in npcs and "?" in text:
+                total["questions"] += 1
+                if not any(w == to for w, _, _, _ in said[i + 1:i + 4]):
+                    total["unanswered"] += 1
+            if any(w != who and echoes(text, t) for w, _, t, _ in said[max(0, i - 5):i]):
+                total["near_repeats"] += 1
+            total["plain"] += bool(PLAIN.search(text))
+        if llm is not None and said:
+            numbered = "\n".join(f"{n + 1}. [{w} -> {t}]: {x}" for n, (w, t, x, _) in enumerate(said))
+            verdict = llm.generate_json(TOPIC_JUDGE, f"CONVERSATION:\n{numbered}\n\n"
+                                        'Return {"labels": [{"n": 1, "label": "reply|new_topic|echo|non_sequitur"}, ...]} '
+                                        "with one entry per line.") or {}
+            labels = {x.get("n"): str(x.get("label", "")) for x in verdict.get("labels", []) if isinstance(x, dict)}
+            for n, (who, _, _, opens) in enumerate(said, start=1):
+                if who == "Player":
+                    continue
+                label = labels.get(n, "")
+                total["openers" if opens else "follow_ups"] += 1
+                if opens and label == "reply":
+                    total["opener_replies"] += 1  # a new round that only keeps the last one going
+                if not opens and label == "new_topic":
+                    total["drift"] += 1  # a reply that wanders off to another subject
+                total["off_topic"] += label == "non_sequitur"
+                total["echo"] += label == "echo"
+    for day_threads in run.get("threads", {}).values():
+        for t in day_threads:
+            turns = t["turns"]
+            for i, turn in enumerate(turns):
+                if turn["speaker"] == "Player" and turn["intent"] in ("question", "accuse") and turn["target"] in npcs:
+                    total["player_questions"] += 1
+                    total["player_answered"] += bool(i + 1 < len(turns) and turns[i + 1]["speaker"] == turn["target"])
+    lines = max(1, total["lines"])
+    total.update(lines_per_day=round(total["lines"] / max(1, total["days"]), 1),
+                 unanswered_rate=round(total["unanswered"] / max(1, total["questions"]), 2),
+                 repeat_rate=round(total["near_repeats"] / lines, 3),
+                 plain_rate=round(total["plain"] / lines, 3),
+                 opener_reply_rate=round(total["opener_replies"] / max(1, total["openers"]), 2),
+                 drift_rate=round(total["drift"] / max(1, total["follow_ups"]), 3),
+                 echo_rate=round(total["echo"] / lines, 3),
+                 off_topic_rate=round(total["off_topic"] / lines, 3))
+    return total
+
+
+# ---------------------------------------------------------------------------
 
 def spare_player(gm):
     """Test-only: keeps the traveler alive so later days (and evening chats after a vote) get probed.
@@ -276,7 +397,10 @@ def play(seed: int, config: dict, llm, echo: bool, spare: bool = False) -> dict:
             spare_player(gm)
         io.display(f"ROLES: {gm.state.roles}")
         gm.run_loop()
-    run = {"seed": seed, "log": path, "result": gm.state.game_result, "days": gm.state.day,
+    threads = {str(day): [{"opener": t.opener, "topic": t.topic, "ended": t.ended, "owed": t.owed,
+                           "turns": [vars(turn) for turn in t.turns]} for t in day_threads]
+               for day, day_threads in gm.state.threads.items()}
+    run = {"seed": seed, "log": path, "result": gm.state.game_result, "days": gm.state.day, "threads": threads,
            "minutes": round((time.time() - start) / 60, 1), "lines": io.lines, "probes": io.probes,
            "final_truth": io.truth(), "day_truth": io.day_truth}
     with open(path.replace(".log", ".json"), "w") as f:
@@ -288,10 +412,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--games", type=int, default=1)
-    parser.add_argument("--max-assertions", type=int, default=None)
+    parser.add_argument("--turns", type=int, default=None, help="override spoken lines per day (turns_per_day)")
     parser.add_argument("--echo", action="store_true")
     parser.add_argument("--no-logic", action="store_true", help="hide [Logic] lines (what a player sees)")
     parser.add_argument("--audit", help="only re-judge a finished run's .json")
+    parser.add_argument("--metrics", nargs="+", help="only print discussion metrics for finished runs' .json files")
+    parser.add_argument("--no-topic-judge", action="store_true", help="metrics without the LLM off-topic check")
     parser.add_argument("--spare-player", action="store_true",
                         help="test only: the traveler is never hanged or killed, so games run longer")
     args = parser.parse_args()
@@ -300,9 +426,33 @@ def main():
         config = json.load(f)
     apply_env_overrides(config)
     config.setdefault("debug", {})["show_logic"] = not args.no_logic
-    if args.max_assertions:
-        config["discussion"]["max_assertions_per_day"] = args.max_assertions
+    config["debug"]["show_threads"] = True
+    if args.turns:
+        config["discussion"]["turns_per_day"] = args.turns
     llm = create_llm(config)
+
+    if args.metrics:
+        judge = None if args.no_topic_judge else llm
+        rows = []
+        for path in args.metrics:
+            with open(path) as f:
+                run = json.load(f)
+            rows.append({"seed": run["seed"], **discussion_metrics(run, judge)})
+            print(json.dumps(rows[-1]), flush=True)
+        keys = ("lines_per_day", "unanswered_rate", "repeat_rate", "plain_rate", "off_topic_rate")
+        sums = {k: sum(r[k] for r in rows) for k in ("lines", "questions", "unanswered", "near_repeats", "plain",
+                                                     "openers", "follow_ups", "opener_replies", "drift",
+                                                     "echo", "off_topic", "days", "player_questions", "player_answered")}
+        print(json.dumps({"ALL": True, **sums,
+                          "lines_per_day": round(sums["lines"] / max(1, sums["days"]), 1),
+                          "unanswered_rate": round(sums["unanswered"] / max(1, sums["questions"]), 2),
+                          "repeat_rate": round(sums["near_repeats"] / max(1, sums["lines"]), 3),
+                          "plain_rate": round(sums["plain"] / max(1, sums["lines"]), 3),
+                          "opener_reply_rate": round(sums["opener_replies"] / max(1, sums["openers"]), 2),
+                          "drift_rate": round(sums["drift"] / max(1, sums["follow_ups"]), 3),
+                          "echo_rate": round(sums["echo"] / max(1, sums["lines"]), 3),
+                          "off_topic_rate": round(sums["off_topic"] / max(1, sums["lines"]), 3)}))
+        return
 
     runs = []
     if args.audit:

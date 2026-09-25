@@ -4,7 +4,7 @@ The player presses Enter at every prompt (never speaks) and picks a random menu 
 Each game's full transcript is written to logs/headless/<timestamp>-seed<N>.log.
 
     uv run python scripts/headless.py --seed 3
-    uv run python scripts/headless.py --games 5 --max-assertions 3
+    uv run python scripts/headless.py --games 5 --turns 12
 """
 import argparse
 import json
@@ -117,7 +117,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--seed", type=int, default=None, help="seed of the first game (default: random)")
     parser.add_argument("--games", type=int, default=1)
-    parser.add_argument("--max-assertions", type=int, default=None, help="override assertions per day")
+    parser.add_argument("--turns", type=int, default=None, help="override spoken lines per day (turns_per_day)")
     parser.add_argument("--echo", action="store_true", help="also print the game to the terminal")
     args = parser.parse_args()
 
@@ -125,8 +125,8 @@ def main():
         config = json.load(f)
     apply_env_overrides(config)
     config.setdefault("debug", {})["show_logic"] = True
-    if args.max_assertions:
-        config["discussion"]["max_assertions_per_day"] = args.max_assertions
+    if args.turns:
+        config["discussion"]["turns_per_day"] = args.turns
 
     llm = create_llm(config)
     first = args.seed if args.seed is not None else random.randrange(10_000)
