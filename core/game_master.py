@@ -19,7 +19,6 @@ class GameMaster:
         self.llm = llm_service
         self.prompt_builder = prompt_service
         self.config = config.get("discussion", {})
-        self.config_all = config
         self.debug = config.get("debug", {})
         self.logbook_config = config.get("logbook", {})
         self.crime_scene_config = config.get("crime_scene", {})

@@ -18,43 +18,41 @@ class ConversationController:
     # ------------------------------------------------------------------
 
     def introduce(self, name: str, transcript: list[str]) -> str:
-        return self._line(name, transcript, "introduction",
-                          f"The traveler has just walked into the tavern. Introduce yourself the way {name} "
-                          f"would: your name, and a quick reaction to a stranger turning up now.")
+        return self._line(name, transcript,
+                          f"The traveler has just walked into the tavern. Introduce yourself to them the way "
+                          f"{name} would: who you are, what you do here, and what you make of a stranger turning "
+                          f"up now. 2-3 sentences.")
 
     def reply(self, name: str, transcript: list[str], private: bool) -> str:
-        where = "in private" if private else "in front of the others"
-        return self._line(name, transcript, "reply",
-                          f"The traveler just spoke to you, {where}. Answer what they actually said, the way "
-                          f"{name} would: push back, ask something back, or give a little away.", private=private)
+        where = "in private, away from the others" if private else "in front of the others at the tavern"
+        return self._line(name, transcript,
+                          f"The traveler just spoke to you, {where}. Reply the way {name} would: share what you "
+                          f"think, ask them something, or keep your guard up. 1-3 sentences.", private=private)
 
     def remark_on_silence(self, name: str, introduced: str, transcript: list[str]) -> str:
         who = "you" if name == introduced else introduced
-        return self._line(name, transcript, "remark",
-                          f"{introduced} just introduced themselves to the traveler, who said nothing back. "
-                          f"React to the traveler's silence toward {who}, the way {name} would.")
+        return self._line(name, transcript,
+                          f"{introduced} just introduced themselves to the traveler, who said nothing at all in "
+                          f"return. Comment on the traveler's silence toward {who}, the way {name} would. "
+                          f"1 sentence.")
 
     def open_chat(self, name: str) -> str:
-        return self._line(name, [], "opening",
+        return self._line(name, [],
                           f"The traveler has sought you out for a private word, away from the others. Open the "
-                          f"conversation the way {name} would, given what has happened so far.", private=True)
+                          f"conversation the way {name} would, given everything that has happened so far. "
+                          f"1-2 sentences.", private=True)
 
     # ------------------------------------------------------------------
     # Generation with the leak check
     # ------------------------------------------------------------------
 
-    DEFAULT_MAX_WORDS = {"introduction": 30, "reply": 28, "remark": 16, "opening": 22}
-
-    def _line(self, name: str, transcript: list[str], kind: str, instruction: str, private: bool = False) -> str:
+    def _line(self, name: str, transcript: list[str], instruction: str, private: bool = False) -> str:
         gm = self.gm
         system = gm.npc_controller._system_prompt(name)
-        max_words = gm.config_all.get("conversation", {}).get("max_words", {}).get(
-            kind, self.DEFAULT_MAX_WORDS[kind])
         pack_talk = private and self._is_packmate(name, "Player")
         prompt = gm.prompt_builder.build_conversation_prompt(
             gm.characters[name], gm.get_game_context(), gm.get_roster_text(viewer=name),
             transcript, instruction, roles_known=gm.state.roles_known and not pack_talk,
-            max_words=max_words,
             notes=("The traveler is your fellow werewolf. Nobody can hear you: speak freely, but quietly."
                    if pack_talk else ""),
         )
@@ -65,24 +63,7 @@ class ConversationController:
                 system, prompt + f'\n\nYou almost said: "{line}". That gives away a secret. Say something else.'))
         if not line or self.leaks_secret(name, line, listener):
             line = self._deflection(name)
-        return self.trim(line, max_words)
-
-    @staticmethod
-    def trim(text: str, max_words: int) -> str:
-        """Keeps whole sentences while they fit in `max_words`; a single overlong sentence is cut short."""
-        sentences = re.split(r"(?<=[.!?…])\s+", text.strip())
-        kept, count = [], 0
-        for sentence in sentences:
-            words = len(sentence.split())
-            if kept and count + words > max_words:
-                break
-            kept.append(sentence)
-            count += words
-        result = " ".join(kept)
-        words = result.split()
-        if len(words) > max_words:
-            result = " ".join(words[:max_words]).rstrip(",;:—-") + "…"
-        return result
+        return line
 
     def _is_packmate(self, name: str, other: str) -> bool:
         book = self.gm.state.logbooks.get(name)

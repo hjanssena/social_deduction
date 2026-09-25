@@ -166,14 +166,5 @@
             "road dust",
             "heavy boots"
         ]
-    },
-    "conversation": {
-        "_docs": "Introductions and private chats with the traveler. max_words: the most words per line, by kind (introduction, reply to the traveler, remark about the traveler's silence, opening of a private chat). The model is asked to stay under it, and longer lines are cut back at a sentence boundary.",
-        "max_words": {
-            "introduction": 30,
-            "reply": 28,
-            "remark": 16,
-            "opening": 22
-        }
     }
 }
