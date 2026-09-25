@@ -13,6 +13,7 @@ class Logbook:
         self.friends = list(friends)
         self.enemies = list(enemies)
         self.pack = []  # Secret: fellow werewolves, pinned as allies at night 0 (see assign_pack)
+        self.memory = ""  # Older entries, compacted each night into a few sentences
         self.entries = []  # [{"day": int, "phase": str, "text": str}]
 
     def relation_to(self, name: str) -> str | None:
@@ -33,6 +34,13 @@ class Logbook:
         if text:
             self.entries.append({"day": day, "phase": phase, "text": text})
 
+    def compact(self, memory: str):
+        """Replaces the memory and every entry so far with a new, shorter memory."""
+        memory = (memory or "").strip()
+        if memory:
+            self.memory = memory
+            self.entries = []
+
     def set_allegiances(self, friends: list[str], enemies: list[str], valid_names: list[str]):
         """Replaces the allegiance table with LLM-proposed lists, dropping unknown names.
         Pinned packmates are never touched."""
@@ -51,6 +59,8 @@ class Logbook:
         if self.pack:
             lines.append(f"Allies, your werewolf pack (secret, never say this aloud): {label(self.pack)}")
 
+        if self.memory:
+            lines.append(f"Memories: {self.memory}")
         entries = self.entries[-max_entries:] if max_entries else self.entries
         if entries:
             lines.append("Entries:")

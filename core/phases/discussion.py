@@ -26,6 +26,10 @@ class DiscussionPhase:
 
         io.show_phase("DISCUSSION", state.day)
 
+        if gm.background.pending():
+            io.show_system("The villagers gather in the square...", style="muted")
+            gm.background.wait_idle()
+
         # Condense previous day's history + morning reports
         if state.chat_history:
             gm.condense_day_history()

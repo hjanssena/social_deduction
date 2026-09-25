@@ -39,6 +39,7 @@ class VotingPhase:
         self._reveal_player_vote(player_vote)
         self._reveal_npc_votes(npc_voters, npc_vote_results, all_votes)
 
+        state.votes_by_day[state.day] = dict(all_votes)
         ballots = ", ".join(f"{v} -> {t}" for v, t in all_votes.items() if t != "None")
         state.public_events.append(f"Day {state.day} votes: {ballots or 'everyone abstained'}.")
         self._tally_and_execute(all_votes)

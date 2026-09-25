@@ -71,6 +71,61 @@ class NPCController:
         entry = self.gm.llm.generate_text(system, prompt)
         book.add_entry(self.gm.state.day, "Prologue", entry.strip().strip('"'))
 
+    def write_entry(self, name: str, moment: str, facts: list[str]):
+        """Adds an in-character entry about `facts` and lets the character revise their friends and
+        enemies. Meant to run in the background (see GameMaster.background)."""
+        state = self.gm.state
+        book = state.logbooks.get(name)
+        if not book or not facts or name not in state.alive_characters:
+            return
+        names = [n for n in self.gm.characters if n != name] + ["Player"]
+        prompt = self.gm.prompt_builder.build_logbook_entry_prompt(self.gm.characters[name], moment, facts, names)
+        data = self.gm.llm.generate_json(self._system_prompt(name), prompt, use_narrative_cfg=True) or {}
+        entry = str(data.get("entry", "")).strip().strip('"')
+        if not entry:
+            return
+        book.add_entry(state.day, moment, entry)
+        friends, enemies = data.get("friends"), data.get("enemies")
+        if isinstance(friends, list) and isinstance(enemies, list):
+            clean = lambda xs: [self.gm.sanitize_target(str(x), pool=names) for x in xs]
+            book.set_allegiances(clean(friends), clean(enemies), names)
+
+    def compact_logbook(self, name: str):
+        """Folds a character's memory and entries into a short memory. Runs in the background."""
+        book = self.gm.state.logbooks.get(name)
+        if not book or not book.entries:
+            return
+        cfg = self.gm.logbook_config
+        prompt = self.gm.prompt_builder.build_compaction_prompt(
+            self.gm.characters[name], book.render(alive=self.gm.state.alive_characters),
+            cfg.get("memory_sentences", 6))
+        memory = self.gm.llm.generate_text(self._system_prompt(name), prompt)
+        book.compact(memory.strip().strip('"'))
+
+    def day_facts(self, name: str) -> list[str]:
+        """What happened today that concerns this character, routed through their allegiance table."""
+        state = self.gm.state
+        book = state.logbooks.get(name)
+        if not book:
+            return []
+        facts = self._concerns(name)
+        ballots = state.votes_by_day.get(state.day, {})
+        mine = ballots.get(name)
+        if mine and mine != "None":
+            facts.append(f"You voted to hang {mine}.")
+        against_me = [v for v, t in ballots.items() if t == name]
+        if against_me:
+            facts.append(f"{', '.join(against_me)} voted to hang you.")
+        for voter, target in ballots.items():
+            if voter == name or target in (None, "None", name):
+                continue
+            relation = "packmate" if target in book.pack else book.relation_to(target)
+            if relation:
+                facts.append(f"{voter} voted to hang your {relation} {target}.")
+        if state.last_verdict and state.last_verdict["day"] == state.day:
+            facts.append(state.last_verdict["text"])
+        return facts
+
     # ================================================================
     # REVEAL PIPELINE (called between assertions, not from bids)
     # ================================================================
@@ -110,12 +165,15 @@ class NPCController:
         }
 
     def _stakes_text(self, name: str, speaker: str = None, target: str = None) -> str:
-        """Engine-routed facts that concern this character personally, read off their allegiance
-        table: attacks on them, their friends, enemies or packmates today, and how they relate
-        to whoever is speaking now."""
+        """Engine-routed facts that concern this character personally (see _concerns), joined for a prompt."""
+        return "\n".join(self._concerns(name, speaker, target))
+
+    def _concerns(self, name: str, speaker: str = None, target: str = None) -> list[str]:
+        """Facts that concern this character personally, read off their allegiance table: attacks on
+        them, their friends, enemies or packmates today, and how they relate to whoever is speaking now."""
         book = self.gm.state.logbooks.get(name)
         if not book:
-            return ""
+            return []
         lines, described = [], set()
         today = [r for r in self.gm.state.public_record if r["day"] == self.gm.state.day]
         for r in today[-10:]:
@@ -139,7 +197,7 @@ class NPCController:
                 lines.append(f"{who} is your fellow werewolf (secret).")
             elif book.relation_to(who):
                 lines.append(f"{who} is your {book.relation_to(who)}.")
-        return "\n".join(dict.fromkeys(lines))
+        return list(dict.fromkeys(lines))
 
     TARGETED_INTENTS = {"accuse", "question", "defend_other", "agree", "disagree"}
 

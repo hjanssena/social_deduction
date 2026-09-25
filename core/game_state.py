@@ -37,6 +37,7 @@ class GameState:
         self.attacked_last_night = None  # The wolves' target last night (known to the pack)
         self.saved_last_night = None  # Set when the Guardian Angel protected that target
         self.last_verdict = None  # {"day", "hanged": name or None, "text"} from the latest vote
+        self.votes_by_day = {}  # {day: {voter: target or "None"}}
         self.coroner_knowledge = []
         self.opinions = {}  # {viewer: {target: "short opinion"}} — computed at end of each day
         self.contradiction_log = {}  # {name: [(day, intent, target), ...]}

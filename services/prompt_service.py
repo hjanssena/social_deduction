@@ -117,6 +117,34 @@ class PromptService:
         return prompt
 
     @staticmethod
+    def build_logbook_entry_prompt(character, moment: str, facts: list[str], names: list[str]) -> str:
+        """A new in-character logbook entry, plus the (possibly changed) friends and enemies."""
+        prompt = f"MOMENT: {moment}\n\n"
+        prompt += "WHAT HAPPENED THAT CONCERNS YOU:\n" + "\n".join(f"- {f}" for f in facts) + "\n\n"
+        prompt += (
+            "Write a new entry in your private logbook about this, in your own voice: what you make of it, "
+            "who you trust more or less now and why. You are writing only for yourself, so be honest. "
+            "3-4 sentences.\n"
+            "Then update your friends and enemies. Only change them if something that happened gives you a "
+            "reason; people rarely change sides over nothing.\n"
+            f"Names you can use: {', '.join(names)}\n\n"
+            'Respond with ONLY a JSON object:\n'
+            '{"entry": "<the entry>", "friends": ["<name>", ...], "enemies": ["<name>", ...]}'
+        )
+        return prompt
+
+    @staticmethod
+    def build_compaction_prompt(character, logbook_text: str, sentences: int) -> str:
+        """Folds the logbook's memories and entries into a short memory, the way people forget."""
+        return (
+            f"Here is your private logbook:\n{logbook_text}\n\n"
+            f"Rewrite everything above into your memories, in at most {sentences} sentences, in your own voice. "
+            "Keep what still matters to you: who you suspect and why, who you trust, promises, grudges, "
+            "and the facts you would need to catch a werewolf. Let small details fade, like real memories do.\n"
+            "Respond with ONLY the memories, no heading or quotes."
+        )
+
+    @staticmethod
     def _context_block(game_context: str, roster_text: str, claims_text: str,
                        record_text: str, chat_history: list[str], history_window: int) -> str:
         """The shared picture of the room: situation, who is here, claims, today's record, recent talk."""

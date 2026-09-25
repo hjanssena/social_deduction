@@ -6,6 +6,7 @@ from core.controllers.npc_controller import NPCController
 from core.controllers.player_controller import PlayerController
 from core.game_state import GameState, GamePhase, WIN_MESSAGES
 from core.stat_engine import StatEngine
+from core.background import BackgroundWorker
 from core.colors import assign_colors
 from core.io_handler import IOHandler
 from core.phases import (ArrivalPhase, NightPhase, MorningPhase, DiscussionPhase, VotingPhase,
@@ -21,6 +22,7 @@ class GameMaster:
         self.logbook_config = config.get("logbook", {})
         self.log_dir = os.path.join("logs", datetime.now().strftime("%Y%m%d-%H%M%S"))
         self.io = io or IOHandler()
+        self.background = BackgroundWorker()  # Log entries and compaction, behind the player's back
         self.characters = {c.name: c for c in characters}
         if config.get("display", {}).get("character_colors", True):
             self.io.set_colors(assign_colors(characters))
@@ -241,18 +243,18 @@ class GameMaster:
             lines.append(f"It is now Day {state.day}. {len(state.alive_characters)} people remain alive.")
         return " ".join(lines)
 
-    def sanitize_target(self, target: str) -> str:
-        """Maps an LLM-supplied target onto a living character's exact name, or 'None'.
+    def sanitize_target(self, target: str, pool: list[str] = None) -> str:
+        """Maps an LLM-supplied target onto an exact name from `pool` (default: the living), or 'None'.
         Accepts different casing, extra words ("Silas the scholar"), a first name alone
         ("Sol" for "Sol Badguy") and occupations ("the blacksmith")."""
+        alive = pool if pool is not None else self.state.alive_characters
         target = (target or "None").strip().strip('"\'.')
-        if target in self.state.alive_characters or target == "None":
+        if target in alive or target == "None":
             return target
 
         target_lower = target.lower()
         if target_lower in ("", "none", "null", "nobody", "room", "everyone"):
             return "None"
-        alive = self.state.alive_characters
         for name in alive:
             if name.lower() == target_lower:
                 return name

@@ -92,7 +92,7 @@
         }
     },
     "logbook": {
-        "_docs": "Private per-character logbooks. friends_count / enemies_count: [min, max] random starting friends / enemies per NPC, drawn from the other NPCs (the Player always starts as a stranger). mutual_friend_chance / mutual_enemy_chance: how likely a friendship or enmity is returned. max_entries_in_prompt: how many of the most recent entries are included in each prompt.",
+        "_docs": "Private per-character logbooks. friends_count / enemies_count: [min, max] random starting friends / enemies per NPC, drawn from the other NPCs (the Player always starts as a stranger). mutual_friend_chance / mutual_enemy_chance: how likely a friendship or enmity is returned. max_entries_in_prompt: how many of the most recent entries are included in each prompt. compact_after_night: each morning, fold every logbook into a short memory (people forget). memory_sentences: the most sentences that memory may have.",
         "friends_count": [
             1,
             2
@@ -103,7 +103,9 @@
         ],
         "max_entries_in_prompt": 12,
         "mutual_friend_chance": 0.7,
-        "mutual_enemy_chance": 0.5
+        "mutual_enemy_chance": 0.5,
+        "compact_after_night": true,
+        "memory_sentences": 6
     },
     "debug": {
         "_docs": "Debug display toggles. show_logic: print each character's decision (intent, target, emotion, private thought) in gray. dump_logbooks: write every logbook to logs/<game>/<name>.md after each phase.",

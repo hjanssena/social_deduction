@@ -35,6 +35,12 @@ class AftermathPhase:
 
         if not chain:
             io.show_system("Nobody has anything to say. The villagers drift home in silence.", style="muted")
+
+        # Everyone writes about their day while the player moves on
+        for name in state.alive_characters:
+            if name in state.logbooks:
+                gm.background.submit(gm.npc_controller.write_entry, name, "End of day",
+                                     gm.npc_controller.day_facts(name))
         io.pause()
         state.phase = GamePhase.CHATS
 
