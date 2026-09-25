@@ -56,7 +56,7 @@ def test_silent_traveler_draws_remarks_and_arrival_has_no_roles(gm, llm, io):
     llm.text_answers = [f"line {i}" for i in range(40)]
     ArrivalPhase(gm).run()  # The player presses Enter everywhere, then picks the first chat option
     prompts = [c[2] for c in llm.calls]
-    remarks = [p for p in prompts if "said nothing at all" in p]
+    remarks = [p for p in prompts if "who said nothing back" in p]
     assert len(remarks) >= 4  # ceil(7 / 2) introductions, each met with silence
     assert all("SECRET ROLE" not in c[1] for c in llm.calls)
     assert gm.state.phase == GamePhase.NIGHT
@@ -83,3 +83,18 @@ def test_chat_menu_is_drawn_once_per_day(gm, llm, io):
     first = list(gm.state.chat_options[2])
     ChatsPhase(gm).run()
     assert gm.state.chat_options[2] == first and len(first) == 5
+
+
+def test_trim_keeps_whole_sentences_under_the_budget():
+    from core.controllers.conversation_controller import ConversationController
+    trim = ConversationController.trim
+    assert trim("Short one. Another short one. A third.", 5) == "Short one. Another short one."
+    assert trim("One two three four five six seven.", 4) == "One two three four…"
+    assert trim("Fits fine.", 10) == "Fits fine."
+
+
+def test_conversation_prompt_asks_for_short_lines(gm, llm):
+    llm.text_answers = ["Evening. " + "Words " * 60]
+    line = gm.conversation_controller.introduce(npcs(gm)[0], [])
+    assert "At most 30 words" in llm.last_prompt
+    assert len(line.split()) <= 30
