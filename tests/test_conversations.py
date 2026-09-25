@@ -47,7 +47,7 @@ def test_leaking_line_is_retried_then_deflected(gm, llm):
     wolves = learn_roles(gm)
     wolf = next(w for w in wolves if w != "Player")
     llm.text_answers = ["I am a werewolf.", "Fine, I'm a wolf."]
-    line = gm.conversation_controller.reply(wolf, ["[Player (the traveler)]: Are you a wolf?"], private=True)
+    line, _ = gm.conversation_controller.reply(wolf, ["[Player (the traveler)]: Are you a wolf?"], private=True)
     assert "werewolf" not in line.lower() and "wolf" not in line.lower().split()
     assert "You almost said" in llm.calls[1][2]
 
@@ -106,7 +106,31 @@ def test_public_claimant_may_speak_of_their_claim_in_private(gm, llm):
         return
     gm.state.revealed_roles[coroner] = "coroner"
     llm.text_answers = ["I am the Coroner, and I stand by what I found."]
-    line = gm.conversation_controller.reply(coroner, [], private=True)
+    line, _ = gm.conversation_controller.reply(coroner, [], private=True)
     assert line.startswith("I am the Coroner")
     assert "already claimed to be the Coroner" in llm.last_prompt
     assert "ROLE CLAIMS MADE IN PUBLIC" in llm.last_prompt
+
+
+def test_villager_can_close_a_private_chat_early(gm, io, llm):
+    name = npcs(gm)[0]
+    llm.text_answers = ["Evening.", "Enough talk for one night. [END]"]
+    io.inputs = ["Hello there.", "One more thing...", "And another."]
+    run_private_chat(gm, name)
+    said = [t for t in gm.state.private_chats[-1]["transcript"] if t.startswith("[Player")]
+    assert len(said) == 1  # the villager ended it after the first reply
+    assert "[END]" not in "\n".join(gm.state.private_chats[-1]["transcript"])
+
+
+def test_last_reply_closes_without_a_question(gm, llm):
+    name = npcs(gm)[0]
+    llm.text_answers = ["Safe travels."]
+    line, ended = gm.conversation_controller.reply(name, [], private=True, last=True)
+    assert ended and line == "Safe travels."
+    assert "Do not ask them anything" in llm.last_prompt
+
+
+def test_a_closing_reply_that_asks_something_keeps_the_chat_open(gm, llm):
+    llm.text_answers = ["Sleep well. But what brings you here? [END]"]
+    line, ended = gm.conversation_controller.reply(npcs(gm)[0], [], private=True)
+    assert not ended and "[END]" not in line

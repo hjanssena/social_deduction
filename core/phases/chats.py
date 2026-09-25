@@ -20,9 +20,13 @@ def run_private_chat(gm, name: str, max_comments: int = 3):
         if not said.strip():
             break
         transcript.append(f"[{TRAVELER}]: {said}")
-        line = conv.reply(name, transcript, private=True)
+        line, ended = conv.reply(name, transcript, private=True, last=i == max_comments - 1)
         io.show_dialogue(name, "Player", line)
         transcript.append(f"[{name}]: {line}")
+        if ended:
+            if i < max_comments - 1:
+                io.show_narration(f"{name} turns back to the room. The conversation is over.")
+            break
 
     gm.state.private_chats.append({"day": gm.state.day, "with": name, "transcript": transcript})
     gm.background.submit(gm.npc_controller.write_entry, name, "Private talk with the traveler",

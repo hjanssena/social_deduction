@@ -5,6 +5,7 @@ TRAVELER = "Player (the traveler)"
 WOLF_WORDS = r"(werewol(f|ves)|wolf|wolves|beast)"
 ROLE_NAMES = r"(guardian angel|coroner)"
 ROLE_LABELS = {"guardian_angel": "Guardian Angel", "coroner": "Coroner"}
+END_MARK = "[END]"  # A villager's reply ends with this when they close the conversation
 
 
 class ConversationController:
@@ -24,12 +25,25 @@ class ConversationController:
                           f"{name} would: who you are, what you do here, and what you make of a stranger in "
                           f"town. This is a first meeting, not an interrogation. 2-3 sentences.")
 
-    def reply(self, name: str, transcript: list[str], private: bool) -> str:
+    def reply(self, name: str, transcript: list[str], private: bool, last: bool = False) -> tuple[str, bool]:
+        """The villager answers the traveler. Returns (line, ended): ended is True when the villager
+        closes the conversation, either because it is the last exchange or because they chose to."""
         where = "in private, away from the others" if private else "in front of the others at the tavern"
-        return self._line(name, transcript,
-                          f"The traveler just spoke to you, {where}. Reply the way {name} would: share what you "
-                          f"think, ask them something, or keep your guard up. 1-3 sentences.", private=private,
-                          replying=True)
+        if last:
+            instruction = (f"The traveler just spoke to you, {where}, and the conversation ends here. Answer them "
+                           f"and close it the way {name} would: a last thought, a warning or a goodbye. Do not "
+                           f"ask them anything. 1-2 sentences.")
+        else:
+            instruction = (f"The traveler just spoke to you, {where}. Reply the way {name} would: answer them, "
+                           f"share what you think, or keep your guard up. Ask one question at most, and only if "
+                           f"{name} really wants to know. If the conversation has run its course, or {name} "
+                           f"wants it over, close it instead. 1-3 sentences.")
+        line = self._line(name, transcript, instruction, private=private, replying=True,
+                          end_mark="" if last else END_MARK)
+        closed = re.search(r"\[\s*end\s*\]", line, re.IGNORECASE)
+        line = re.sub(r"\[\s*end\s*\]", "", line, flags=re.IGNORECASE).strip()
+        # A reply that still asks something leaves the door open, whatever the marker says
+        return line, last or bool(closed and "?" not in line)
 
     def remark_on_silence(self, name: str, introduced: str, transcript: list[str]) -> str:
         who = "you" if name == introduced else introduced
@@ -49,7 +63,7 @@ class ConversationController:
     # ------------------------------------------------------------------
 
     def _line(self, name: str, transcript: list[str], instruction: str, private: bool = False,
-              replying: bool = False) -> str:
+              replying: bool = False, end_mark: str = "") -> str:
         gm = self.gm
         system = gm.npc_controller._system_prompt(name)
         pack_talk = private and self._is_packmate(name, "Player")
@@ -61,6 +75,7 @@ class ConversationController:
             transcript, instruction, roles_known=gm.state.roles_known and not pack_talk,
             notes="\n- ".join(n for n in notes if n),
             claims_text=gm.get_claims_text(), own_claim=ROLE_LABELS.get(gm.state.revealed_roles.get(name), ""),
+            end_mark=end_mark,
         )
         listener = "Player" if private else None
         line = self._clean(name, gm.llm.generate_text(system, prompt))
@@ -77,7 +92,8 @@ class ConversationController:
         state = self.gm.state
         ballots = state.votes_by_day.get(state.day)
         if not state.votes_by_day:
-            return "The town has never held a vote: nobody has voted for anyone." if replying else ""
+            return ("Background, only if the traveler brings it up: the town has never held a vote, so nobody "
+                    "has voted for anyone. Don't raise it yourself." if replying else "")
         if not ballots or name not in ballots:
             return ""
         mine = ballots[name]
