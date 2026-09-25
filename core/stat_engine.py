@@ -269,12 +269,20 @@ class StatEngine:
         """Scans all alive NPCs for pending reveals. Called between assertion rounds.
         Returns a list of (name, reveal_result) tuples. At most one reveal per character."""
         reveals = []
+        wolves = {n for n, r in self.state.roles.items() if r == "werewolf"}
+        # Roles the pack already claims (publicly or in this scan): a second wolf claim would out both
+        pack_claims = {role for n, role in self.state.revealed_roles.items() if n in wolves}
         for name in self.state.alive_characters:
             if name == "Player" or name in self.state.revealed_roles:
                 continue
             result = self._check_reveal(name)
-            if result:
-                reveals.append((name, result))
+            if not result:
+                continue
+            if name in wolves:
+                if result["claimed_role"] in pack_claims:
+                    continue
+                pack_claims.add(result["claimed_role"])
+            reveals.append((name, result))
         return reveals
 
     def _check_reveal(self, name: str) -> dict | None:
@@ -440,8 +448,10 @@ class StatEngine:
             # Pressure the real holder of that role
             if real_role == claimed_role:
                 self.state.reveal_pressure[name] = claimed_role
-            # Pressure wolves to counter-claim (performance-gated in the handler)
-            elif real_role == "werewolf" and name not in self.state.revealed_roles:
+            # Pressure wolves to counter-claim (performance-gated in the handler),
+            # never over a packmate's own claim
+            elif (real_role == "werewolf" and name not in self.state.revealed_roles
+                  and self.state.roles.get(claimant) != "werewolf"):
                 char = self.characters.get(name)
                 if char and char.performance >= self.c_reveal.get("wolf_pressure_performance_threshold", 6):
                     self.state.reveal_pressure[name] = claimed_role

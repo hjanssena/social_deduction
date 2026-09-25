@@ -118,3 +118,25 @@ def test_victory_message_depends_on_the_players_side(gm, io):
     gm.state.roles["Player"] = "werewolf"
     gm.end_game("werewolves_win")
     assert any("[VICTORY]" in line for line in io.lines)
+
+
+def test_only_one_wolf_counter_claims_a_role(gm, monkeypatch):
+    st = gm.state
+    st.roles_known, st.day = True, 2
+    wolf_npcs = [n for n in npcs(gm) if st.roles[n] == "werewolf"]
+    coroner = next((n for n in npcs(gm) if st.roles[n] == "coroner"), None)
+    if len(wolf_npcs) < 2 or not coroner:
+        return
+    for w in wolf_npcs:
+        gm.characters[w].performance = 10  # Every wolf is eager to counter-claim
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    gm.stat_engine.register_reveal(coroner, "coroner")
+    gm.stat_engine.apply_reveal_pressure(coroner, "coroner")
+    reveals = gm.stat_engine.check_all_reveals()
+    wolf_claims = [n for n, r in reveals if n in wolf_npcs and r["claimed_role"] == "coroner"]
+    assert len(wolf_claims) == 1
+
+    # A wolf's own claim never pressures its packmate to counter-claim
+    st.reveal_pressure.clear()
+    gm.stat_engine.apply_reveal_pressure(wolf_npcs[0], "guardian_angel")
+    assert wolf_npcs[1] not in st.reveal_pressure
