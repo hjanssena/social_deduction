@@ -104,14 +104,13 @@ class IOHandler:
         self.display("\n" + self.paint(
             f"[Logic ({speaker})]: [{intent}] -> {target} ({emotion}{extra}) | {reasoning}", self.GRAY))
 
-    def show_vote(self, voter: str, target: str, thoughts: str = ""):
-        """A single character's vote during the voting phase."""
+    def show_vote(self, voter: str, target: str, says: str = "", thoughts: str = ""):
+        """A single character's vote: what they say aloud, then the vote itself.
+        `thoughts` is the private reasoning, passed only in debug mode."""
         if thoughts:
-            self.display(self.paint(f"[Thoughts ({voter})]: {thoughts}", self.GRAY))
-        if target == "None":
-            self.display(self.say(voter, "I... I cannot decide. I abstain."))
-        else:
-            self.display(self.say(voter, f"My vote is for {target}."))
+            self.display(self.paint(f"[Logic ({voter})]: {thoughts}", self.GRAY))
+        vote = "I... I cannot decide. I abstain." if target == "None" else f"My vote is for {target}."
+        self.display(self.say(voter, f"{says} {vote}" if says else vote))
 
     def show_death(self, name: str, cause: str, role: str = None):
         """A character has died (lynched or killed)."""
