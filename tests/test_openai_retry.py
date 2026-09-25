@@ -32,3 +32,19 @@ def test_a_real_bad_request_is_not_retried(monkeypatch):
 def test_gives_up_after_the_retries(monkeypatch):
     svc, calls = service(monkeypatch, [Resp(503)] * 3)
     assert svc._post({}).status_code == 503 and len(calls) == 3
+
+
+def test_unparseable_json_is_asked_for_once_more():
+    from services.llm_base import LLMBase
+
+    class Garbage(LLMBase):
+        def __init__(self, answers):
+            super().__init__({})
+            self.answers = answers
+
+        def _chat(self, *a, **k):
+            return self.answers.pop(0)
+
+    llm = Garbage(['{"></|DSML| parameter>}', '{"ok": true}'])
+    assert llm.generate_json("s", "u") == {"ok": True}
+    assert Garbage(["nope", "still nope"]).generate_json("s", "u") == {}

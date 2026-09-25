@@ -1,14 +1,22 @@
-"""Crossover cast (Mario, Luigi, Dante, ...). Not loaded; swap into characters_data.py to use."""
+"""The crossover cast (Mario, Luigi, Dante, BoJack, Sol, Sonic, Ted), living in the village.
+
+Selected with setup.cast = "crossover" in config.json (the default); see models/characters_data.py.
+"""
 
 RAW_CHARACTER_DATA = [
     {
         "name": "Mario",
-        "clue_tags": ["grease", "mushroom spores", "red thread"],
-        "occupation": "Heroic Plumber",
-        "bio": "The Mushroom Kingdom's greatest hero. Brave and optimistic, but a bit naive and prone to jumping (literally and figuratively) into action.",
+        "clue_tags": [
+            "grease",
+            "red thread",
+            "mushroom spores"
+        ],
+        "color": 174,
+        "occupation": "Plumber",
+        "bio": "The Mushroom Kingdom's greatest hero, now keeping this village's well pumps and mill-race sluices running. Brave and optimistic, a bit naive, and quick to jump (literally and figuratively) into action.",
         "archetype": "Heroic, enthusiastic, and fiercely loyal.",
-        "speech_pattern": "Italian accent, frequent exclamations. Enthusiastic, direct, and straightforward.",
-        "verbal_quirks": "Examples: 'Mamma mia!' 'Let's-a go!' 'Okey-dokey!' 'It's-a me!'",
+        "speech_pattern": "Warm, direct and enthusiastic, with a thick Italian accent. Short exclamations, simple words.",
+        "verbal_quirks": "Drops an Italian '-a' onto some words ('it's-a', 'let's-a go') and saves 'Mamma mia!' for real shocks, never more than once a line. Reaches for images from his adventures (pipes, power-ups, Goombas, Bowser's castle, jumping over pits), a fresh one each time rather than repeating one. Examples: 'This story is-a full of holes, like a pipe after Bowser sat on it.' 'Mamma mia... we can't-a let this happen again!'",
         "stats": {
             "assertion_drive": 7,
             "contrarian_index": 3,
@@ -17,11 +25,6 @@ RAW_CHARACTER_DATA = [
             "performance": 5,
             "intuition": 6
         },
-        "prologue_reactions": [
-            "Mamma mia! We can't-a just stand around while someone is missing!",
-            "I've-a fought Bowser plenty of times, but this... this is-a different.",
-            "Don't-a worry everyone, we are going to get to the bottom of this together!"
-        ],
         "speech_examples": {
             "accuse": {
                 "{target} has been too quiet and evasive": "Mamma mia, {target}, you've been-a hiding in the pipes all day. Speak up!",
@@ -68,12 +71,17 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Luigi",
-        "clue_tags": ["grease", "mushroom spores", "muddy boots"],
-        "occupation": "Anxious Plumber",
-        "bio": "Mario's taller, more easily frightened brother. Often cowers in the face of danger but steps up when it truly matters.",
+        "clue_tags": [
+            "grease",
+            "mushroom spores",
+            "candle wax"
+        ],
+        "color": 114,
+        "occupation": "Plumber and chapel lamplighter",
+        "bio": "Mario's taller, easily frightened brother. Helps with the pumps by day and, reluctantly, lights the chapel lamps at dusk. Cowers in the face of danger but notices details others miss, and steps up when it truly matters.",
         "archetype": "Nervous, observant, and reluctantly brave.",
-        "speech_pattern": "Stuttering, nervous, uses filler words hesitantly. Voice shakes easily.",
-        "verbal_quirks": "Examples: 'O-oh boy...' 'M-Mario?' 'I don't-a like this...'",
+        "speech_pattern": "Nervous and hesitant: stammers on the first word, trails off, lowers his voice. Honest to a fault.",
+        "verbal_quirks": "Stammers the start of a sentence ('I-I...', 'W-wait...'). Mutters 'oh boy' only when truly frightened, a few times a day at most, never in two lines running. Mentions his brother Mario, ghosts, dark hallways or the chapel lamps when nervous, a different worry each time. Examples: 'O-oh boy... that's the same smell as the chapel cellar.' 'I-I don't want to say it, but... somebody's lying.'",
         "stats": {
             "assertion_drive": 3,
             "contrarian_index": 2,
@@ -82,11 +90,6 @@ RAW_CHARACTER_DATA = [
             "performance": 2,
             "intuition": 8
         },
-        "prologue_reactions": [
-            "O-oh man... this is exactly why I didn't want to come here!",
-            "Missing?! Wh-what if whatever got him is coming for us next?",
-            "I-I think I left my Poltergust at home... oh no..."
-        ],
         "speech_examples": {
             "accuse": {
                 "{target} has been too quiet and evasive": "Umm... {target}? Wh-why are you being so quiet? It's really scary...",
@@ -133,12 +136,17 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Dante",
-        "clue_tags": ["gunpowder", "red thread", "food crumbs"],
+        "clue_tags": [
+            "gunpowder",
+            "red thread",
+            "heavy boots"
+        ],
+        "color": 211,
         "occupation": "Devil Hunter",
-        "bio": "A half-demon mercenary who runs the 'Devil May Cry' shop. Cocky, loves pizza, treats life-or-death situations like a game.",
+        "bio": "A half-demon mercenary in a red coat who followed rumors of a beast to this village and set up his 'Devil May Cry' sign in a shed at the edge of the woods. Cocky, loves pizza, and treats life-or-death situations like a game, but he knows monsters when he sees them.",
         "archetype": "Cocky, nonchalant, and provocative.",
-        "speech_pattern": "Casual, slang-heavy, frequently mocks others, highly confident.",
-        "verbal_quirks": "Examples: 'Jackpot.' 'Let's rock!' 'Man, this party's getting crazy.'",
+        "speech_pattern": "Casual, cocky and teasing. Slang, one-liners, mock boredom, total confidence.",
+        "verbal_quirks": "Treats the whole affair like a show he's watching: throws in a quip, a jab about someone's style, or a line about pizza, demons or a good fight, each one new rather than a catchphrase. Says 'Jackpot' at most once a day, when something clicks. Examples: 'Man, you're sweating harder than a demon in church.' 'Jackpot. That's the part of your story that doesn't fit.'",
         "stats": {
             "assertion_drive": 8,
             "contrarian_index": 8,
@@ -147,11 +155,6 @@ RAW_CHARACTER_DATA = [
             "performance": 9,
             "intuition": 7
         },
-        "prologue_reactions": [
-            "Man, and here I was hoping I could just grab a slice of pizza in peace.",
-            "Missing uncle? Demons? Sounds like a regular Tuesday to me. Let's rock.",
-            "If someone in here is playing the bad guy, they better put up a good fight."
-        ],
         "speech_examples": {
             "accuse": {
                 "{target} has been too quiet and evasive": "You're awfully quiet over there, {target}. Cat got your tongue, or just a guilty conscience?",
@@ -198,12 +201,17 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "BoJack Horseman",
-        "clue_tags": ["whiskey", "horse hair", "cigarette ash"],
+        "clue_tags": [
+            "whiskey",
+            "cigarette ash",
+            "horse hair"
+        ],
+        "color": 180,
         "occupation": "Washed-up Actor",
-        "bio": "Former star of the 90s sitcom 'Horsin' Around'. Deeply cynical, depressed, self-destructive, and highly critical of everyone.",
+        "bio": "Former star of the 90s sitcom 'Horsin' Around', holed up in a rented room above the tavern after one bender too many. Cynical, self-destructive and highly critical of everyone, himself most of all.",
         "archetype": "Cynical, defensive, and deeply insecure.",
-        "speech_pattern": "Sarcastic, defensive, verbose, often makes it about himself. Interrupts others.",
-        "verbal_quirks": "Examples: 'What are you talking about?' 'Are we really doing this?' 'Back in the 90s...'",
+        "speech_pattern": "Sarcastic, defensive and rambling. Interrupts, overshares, and makes things about himself.",
+        "verbal_quirks": "Undercuts every serious moment with sarcasm, then slips into a bitter aside about himself, his career or Hollywood, a different one each time. Rhetorical questions ('Are we really doing this?') at most once in a while. Examples: 'Great, a murder. This is worse than my third-season finale.' 'You know what, I'm a terrible person, and even I can see that doesn't add up.'",
         "stats": {
             "assertion_drive": 6,
             "contrarian_index": 9,
@@ -212,11 +220,6 @@ RAW_CHARACTER_DATA = [
             "performance": 7,
             "intuition": 5
         },
-        "prologue_reactions": [
-            "Great. Just great. I leave my house for one drink, and now I'm stuck in a murder mystery.",
-            "Can we just fast-forward to the part where you figure this out? I have a terrible hangover.",
-            "Someone missing? Are we sure he didn't just realize this town sucks and leave?"
-        ],
         "speech_examples": {
             "accuse": {
                 "{target} has been too quiet and evasive": "Okay, is nobody going to talk about how {target} is just standing there looking incredibly guilty? Because I am.",
@@ -263,12 +266,17 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Sol Badguy",
-        "clue_tags": ["scorch marks", "red thread", "cigarette ash"],
+        "clue_tags": [
+            "scorch marks",
+            "cigarette ash",
+            "heavy boots"
+        ],
+        "color": 215,
         "occupation": "Bounty Hunter",
-        "bio": "A gruff, incredibly powerful fighter known as the Flame of Corruption. Dislikes complicated things and prefers to solve problems with a flaming sword.",
+        "bio": "A gruff, immensely strong fighter known as the Flame of Corruption, drawn here by the bounty on the beast. Hates complicated things and would rather solve problems with his burning sword. Sleeps in the forge loft.",
         "archetype": "Gruff, impatient, and brutally direct.",
-        "speech_pattern": "Very short, annoyed, dismissive. Rarely uses full sentences if a single word will do.",
-        "verbal_quirks": "Examples: 'Tch.' 'Whatever.' 'Out of my way.'",
+        "speech_pattern": "Very short and annoyed. Fragments over full sentences. Blunt, no patience for talk.",
+        "verbal_quirks": "Speaks in clipped fragments and shows irritation with a grunt ('Tch.') or a curt dismissal, not every line. Compares things to fights, bounties and fire when he says anything more. Examples: 'Tch. You talk too much for someone with nothing to hide.' 'Burns don't lie. People do.'",
         "stats": {
             "assertion_drive": 9,
             "contrarian_index": 7,
@@ -277,11 +285,6 @@ RAW_CHARACTER_DATA = [
             "performance": 3,
             "intuition": 6
         },
-        "prologue_reactions": [
-            "Tch. More annoying crap to deal with.",
-            "Someone's missing? Fine. Let's just find the guy who did it so I can sleep.",
-            "Stop whining. A loud room just gives me a headache."
-        ],
         "speech_examples": {
             "accuse": {
                 "{target} has been too quiet and evasive": "Tch. {target}. You're quiet. Speak up or get out of my way.",
@@ -328,12 +331,17 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Sonic the Hedgehog",
-        "clue_tags": ["blue fur", "sneaker tread", "food crumbs"],
-        "occupation": "Supersonic Hero",
-        "bio": "The fastest thing alive. Impatient, cocky, hates standing still or overthinking problems. Always ready to run.",
+        "clue_tags": [
+            "road dust",
+            "blue fur",
+            "food crumbs"
+        ],
+        "color": 75,
+        "occupation": "Village Courier",
+        "bio": "The fastest thing alive, who carries the village's letters and errands to the valley and back faster than anyone thought possible. Impatient, cocky, hates standing still or overthinking things. Knows every road and path around the village.",
         "archetype": "Energetic, impatient, and snarky.",
-        "speech_pattern": "Fast-paced, uses 90s/early 2000s slang, constantly wants to move on.",
-        "verbal_quirks": "Examples: 'Way past cool!' 'Too slow!' 'Gotta go fast!'",
+        "speech_pattern": "Fast, breezy and snarky. Short punchy sentences, 90s slang, always wants to move on.",
+        "verbal_quirks": "Talks like he's already halfway out the door: teases slow thinkers, uses speed and racing images (laps, shortcuts, the finish line), a fresh one each time. 'Too slow!' or 'Way past cool' at most once in a while. Examples: 'You took the long way round that story, pal.' 'I've run this valley a thousand times and those tracks don't belong to any of us.'",
         "stats": {
             "assertion_drive": 8,
             "contrarian_index": 5,
@@ -342,11 +350,6 @@ RAW_CHARACTER_DATA = [
             "performance": 6,
             "intuition": 7
         },
-        "prologue_reactions": [
-            "A mystery? Sounds like an adventure! Let's get moving!",
-            "Standing around talking isn't gonna find anyone! Let's go!",
-            "Whoever did this is gonna eat my dust!"
-        ],
         "speech_examples": {
             "accuse": {
                 "{target} has been too quiet and evasive": "Hey {target}, you're moving too slow to hide that guilt! Spill it!",
@@ -393,12 +396,17 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Ted Lasso",
-        "clue_tags": ["food crumbs", "chalk dust", "muddy boots"],
+        "clue_tags": [
+            "food crumbs",
+            "chalk dust",
+            "grass stains"
+        ],
+        "color": 107,
         "occupation": "Football Coach",
-        "bio": "An endlessly optimistic American coaching soccer in the UK. Believes in people, uses folksy metaphors, and tries to unite everyone.",
+        "bio": "An endlessly optimistic American who coaches the village children's football team on the green by the churchyard and bakes biscuits for anyone who looks sad. Believes in people, uses folksy metaphors, and tries to keep everyone together.",
         "archetype": "Optimistic, folksy, and empathetic.",
-        "speech_pattern": "Southern drawl, heavily reliant on bizarre but charming analogies and puns. Warm and reassuring.",
-        "verbal_quirks": "Examples: 'Howdy!' 'Appreciate ya.' 'Well now, that's like a cat at a dog show.'",
+        "speech_pattern": "Friendly Southern drawl. Warm, reassuring, polite even when disagreeing.",
+        "verbal_quirks": "Builds a homespun analogy or pun around his point (football, barbecue, Kansas, the weather, small-town life), always a new one rather than a stock line, and thanks people ('appreciate ya') now and then. Mentions his biscuits rarely, only when someone looks like they need cheering up. Examples: 'That alibi's got more holes than a screen door on a submarine.' 'Now, I believe in hope, but hope's not an alibi, friend.'",
         "stats": {
             "assertion_drive": 4,
             "contrarian_index": 1,
@@ -407,11 +415,6 @@ RAW_CHARACTER_DATA = [
             "performance": 8,
             "intuition": 9
         },
-        "prologue_reactions": [
-            "Well, shoot. That is just about the saddest news a fella could hear on a Tuesday.",
-            "I know things look darker than a basement at midnight, but we've gotta stick together.",
-            "Let's not let panic drive the bus, folks. We can sort this out."
-        ],
         "speech_examples": {
             "accuse": {
                 "{target} has been too quiet and evasive": "Well now, {target}, you've been quieter than a church mouse at a rock concert. Care to chime in?",

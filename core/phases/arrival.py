@@ -56,7 +56,8 @@ class ArrivalPhase:
                     transcript.append(f"[{speaker}]: {remark}")
             io.pause()
 
-        for name in mentioned:
+        spoke = {line[1:line.index("]")] for line in transcript if line.startswith("[")}
+        for name in (n for n in mentioned if n not in spoke):
             occupation = gm.characters[name].occupation.lower()
             io.show_narration(f"You also notice {name}, the {occupation}, among the faces in the room.")
         io.pause()

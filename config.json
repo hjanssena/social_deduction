@@ -1,6 +1,7 @@
 {
     "setup": {
-        "_docs": "Game setup: how many of each special role to include.",
+        "_docs": "Game setup. cast: which characters play, 'crossover' (Mario, Luigi, Dante, BoJack, Sol, Sonic, Ted) or 'village' (Elias, Silas, Victor, Elara, Garrick, Bram, Maeve); see models/characters_data.py. The rest: how many of each special role to include.",
+        "cast": "crossover",
         "werewolf_count": 2,
         "guardian_angel_count": 1,
         "coroner_count": 1

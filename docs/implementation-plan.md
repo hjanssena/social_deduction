@@ -30,6 +30,7 @@ Target design: [`game-loop.md`](game-loop.md). Each milestone leaves the game pl
 | 20 | Validate the thread model before adding to it: changing topic mid-thread (`/new`) waits until then. |
 | 21 | Thread markers (topic and how it ended) are a debug flag, `debug.show_threads`. |
 | 22 | The day is **one conversation about the killing**: every prompt leads with the day's question and the last two lines; when it runs dry, someone moves it to a new angle of the killing (supersedes 18). |
+| 23 | The **crossover cast** (Mario, Luigi, Dante, BoJack, Sol, Sonic, Ted) is the default, living in the village; `setup.cast` (or `CAST`) switches back to the village cast. |
 
 ## Ground rules
 

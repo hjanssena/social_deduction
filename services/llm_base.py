@@ -58,7 +58,10 @@ class LLMBase(ABC):
         text = text.replace("\u2018", "'").replace("\u2019", "'")  # ' '
         return text
 
-    def generate_json(self, system_prompt: str, user_prompt: str, use_narrative_cfg: bool = False) -> dict:
+    def generate_json(self, system_prompt: str, user_prompt: str, use_narrative_cfg: bool = False,
+                      _retry: bool = True) -> dict:
+        """One JSON object from the model. An answer that can't be parsed (models occasionally emit
+        garbage tokens) is asked for once more before giving up with {}."""
         cfg = self.config.get("narrative" if use_narrative_cfg else "logic", {})
         with self._gate.hold():
             try:
@@ -88,7 +91,9 @@ class LLMBase(ABC):
             except json.JSONDecodeError:
                 pass
 
-        print(f"\033[91m[Error] Failed to parse JSON. Raw LLM output:\n{response_text}\033[0m")
+        if _retry:
+            return self.generate_json(system_prompt, user_prompt, use_narrative_cfg, _retry=False)
+        print(f"\033[91m[Error] Failed to parse JSON. Raw LLM output:\n{response_text[:500]}\033[0m")
         return {}
 
     def generate_text(self, system_prompt: str, user_prompt: str) -> str:

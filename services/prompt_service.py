@@ -4,15 +4,15 @@ import random
 VALID_INTENTS = "accuse|defend_other|defend_self|agree|disagree|deflect|question|neutral"
 VALID_EMOTIONS = "neutral|angry|suspicious|fearful|arrogant|sad|happy"
 
-# One-shot example for the intent parser prompt
-PARSER_EXAMPLES = """Input: "I think Elara is hiding something, she was too quiet yesterday."
-Output: {"analysis": "Blaming Elara for being suspicious", "intent": "accuse", "target": "Elara", "emotion": "suspicious", "summary": "Accusing Elara of hiding"}
+# Worked examples for the intent parser prompt; {a} and {b} become two names from the current roster
+PARSER_EXAMPLES = """Input: "I think {a} is hiding something, they were too quiet yesterday."
+Output: {{"analysis": "Blaming {a} for being suspicious", "intent": "accuse", "target": "{a}", "emotion": "suspicious", "summary": "Accusing {a} of hiding"}}
 
-Input: "Leave Garrick alone, he's done nothing wrong!"
-Output: {"analysis": "Protecting Garrick from accusations", "intent": "defend_other", "target": "Garrick", "emotion": "angry", "summary": "Defending Garrick from blame"}
+Input: "Leave {b} alone, they've done nothing wrong!"
+Output: {{"analysis": "Protecting {b} from accusations", "intent": "defend_other", "target": "{b}", "emotion": "angry", "summary": "Defending {b} from blame"}}
 
-Input: "I wasn't even near the estate that night!"
-Output: {"analysis": "Denying personal involvement", "intent": "defend_self", "target": "None", "emotion": "fearful", "summary": "Denying own involvement"}"""
+Input: "I wasn't even near the body that night!"
+Output: {{"analysis": "Denying personal involvement", "intent": "defend_self", "target": "None", "emotion": "fearful", "summary": "Denying own involvement"}}"""
 
 
 NPC_INTENTS = VALID_INTENTS  # What an NPC may choose when speaking up
@@ -332,6 +332,12 @@ class PromptService:
         return prompt + fmt
 
     @staticmethod
+    def _parser_examples(roster_text: str) -> str:
+        """The parser's worked examples, using two names from the current cast."""
+        names = [n for n in PromptService._extract_names(roster_text) if n != "Player"] + ["Anna", "Tom"]
+        return PARSER_EXAMPLES.format(a=names[0], b=names[1])
+
+    @staticmethod
     def _extract_names(roster_text: str) -> list[str]:
         """Extract character names from roster lines like '- Elias: Blacksmith.'"""
         names = []
@@ -362,7 +368,7 @@ class PromptService:
 """
         prompt += f"Roster:\n{roster_text}\n\n"
         prompt += f"Context:\n{context_text}\n\n"
-        prompt += f"Examples:\n{PARSER_EXAMPLES}\n\n"
+        prompt += f"Examples:\n{PromptService._parser_examples(roster_text)}\n\n"
         prompt += f'Player said: "{player_text}"\n\n'
         prompt += f"Valid Targets: {valid_targets}\n"
         prompt += f"Valid Emotions: {VALID_EMOTIONS}\n\n"

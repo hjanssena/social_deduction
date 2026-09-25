@@ -134,3 +134,12 @@ def test_a_closing_reply_that_asks_something_keeps_the_chat_open(gm, llm):
     llm.text_answers = ["Sleep well. But what brings you here? [END]"]
     line, ended = gm.conversation_controller.reply(npcs(gm)[0], [], private=True)
     assert not ended and "[END]" not in line
+
+
+def test_clean_strips_a_speaker_label_but_not_speech():
+    from core.controllers.conversation_controller import ConversationController
+    clean = ConversationController._clean
+    assert clean("Sol Badguy", "[Sol Badguy -> Player]: Tch.") == "Tch."
+    assert clean("Sol Badguy", "Sol Badguy: Tch.") == "Tch."
+    said = "Sol Badguy. Bounty hunter. You're either: running or hunting."
+    assert clean("Sol Badguy", said) == said

@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.game_master import GameMaster  # noqa: E402
 from main import apply_env_overrides  # noqa: E402
 from models.character import Character  # noqa: E402
-from models.characters_data import RAW_CHARACTER_DATA  # noqa: E402
+from models.characters_data import load_cast  # noqa: E402
 from scripts.headless import ANSI, HeadlessIO  # noqa: E402
 from services.llm_factory import create_llm  # noqa: E402
 from services.prompt_service import PromptService  # noqa: E402
@@ -254,7 +254,7 @@ def audit(llm, run: dict) -> dict:
 # Discussion metrics: read from the transcript, so any version of the discussion can be compared
 # ---------------------------------------------------------------------------
 
-SPEECH = re.compile(r"^(?:\[Role claim: [^\]]+\] )?\[(\w+) -> (\w+)\]: (.+)$")
+SPEECH = re.compile(r"^(?:\[Role claim: [^\]]+\] )?\[([^\]]+?) -> ([^\]]+?)\]: (.+)$")
 PLAIN = re.compile(r"\b(plain(ly)?|straight)\b", re.IGNORECASE)
 
 STRUCTURE_JUDGE = (
@@ -434,7 +434,7 @@ def play(seed: int, config: dict, llm, echo: bool, spare: bool = False) -> dict:
     start = time.time()
     with open(path, "w") as log_file:
         io = ProbeIO(log_file, echo)
-        chars = [Character(f"npc_{c['name'].lower()}", c) for c in RAW_CHARACTER_DATA]
+        chars = [Character(f"npc_{c['name'].lower()}", c) for c in load_cast(config)]
         gm = GameMaster(llm, PromptService(), chars, config, io=io)
         io.gm = gm
         if spare:

@@ -1,7 +1,7 @@
 from services.llm_factory import create_llm
 from services.prompt_service import PromptService
 from models.character import Character
-from models.characters_data import RAW_CHARACTER_DATA
+from models.characters_data import load_cast
 from core.game_master import GameMaster
 from dotenv import load_dotenv
 import json
@@ -21,6 +21,7 @@ ENV_OVERRIDES = {
     "OPENAI_REASONING": ("llm", "openai", "reasoning"),
     "OPENAI_USER_AGENT": ("llm", "openai", "user_agent"),
     "OPENAI_SESSION_HEADER": ("llm", "openai", "session_header"),
+    "CAST": ("setup", "cast"),
 }
 
 
@@ -52,7 +53,7 @@ def main():
     prompt_builder = PromptService()
     
     # 2. Instantiate Models
-    characters = [Character(f"npc_{c['name'].lower()}", c) for c in RAW_CHARACTER_DATA]
+    characters = [Character(f"npc_{c['name'].lower()}", c) for c in load_cast(config)]
     
     # 3. Inject into GameMaster
     gm = GameMaster(llm_service=llm, prompt_service=prompt_builder, characters=characters, config=config)

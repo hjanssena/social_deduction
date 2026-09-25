@@ -4,8 +4,7 @@ import re
 from core.colors import PALETTE, PLAYER_COLOR, RESERVED_256, RESET, assign_colors, paint_names
 from core.io_handler import IOHandler
 from models.character import Character
-from models.characters_data import RAW_CHARACTER_DATA
-from models.characters_data_old import RAW_CHARACTER_DATA as CROSSOVER
+from models.characters_data import CROSSOVER, VILLAGE
 
 
 def cast(data):
@@ -17,7 +16,7 @@ def test_palette_avoids_reserved_colors():
 
 
 def test_every_character_gets_a_unique_color():
-    for data in (RAW_CHARACTER_DATA, CROSSOVER):
+    for data in (VILLAGE, CROSSOVER):
         colors = assign_colors(cast(data))
         npc_colors = [v for k, v in colors.items() if k != "Player"]
         assert len(set(npc_colors)) == len(npc_colors)
@@ -25,8 +24,8 @@ def test_every_character_gets_a_unique_color():
 
 
 def test_explicit_color_is_kept():
-    colors = assign_colors(cast(RAW_CHARACTER_DATA))
-    elias = next(c for c in RAW_CHARACTER_DATA if c["name"] == "Elias")
+    colors = assign_colors(cast(VILLAGE))
+    elias = next(c for c in VILLAGE if c["name"] == "Elias")
     assert colors["Elias"] == f"\033[38;5;{elias['color']}m"
 
 

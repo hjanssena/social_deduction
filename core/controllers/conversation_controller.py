@@ -112,7 +112,7 @@ class ConversationController:
     def _clean(name: str, text: str) -> str:
         """Strips quotes and a leading speaker label ("[Elias]:", "Elias ->  Player:") if the model added one."""
         text = (text or "").strip().strip('"').strip()
-        text = re.sub(rf"^\[?{re.escape(name)}[^:\]]*\]?:\s*", "", text)
+        text = re.sub(rf"^\[?{re.escape(name)}(\s*->\s*[^:\]]{{1,40}})?\]?:\s*", "", text)
         return text.strip().strip('"').strip()
 
     def _deflection(self, name: str) -> str:

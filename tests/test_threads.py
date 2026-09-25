@@ -241,7 +241,7 @@ class ScriptedLLM(FakeLLM):
         self.calls.append(("json", system_prompt, user_prompt))
         if user_prompt.startswith("Parse the player's text"):
             return dict(self.player_parse)
-        speaker = re.match(r"You are (\w+)", system_prompt).group(1)
+        speaker = re.match(r"You are (.+?), the ", system_prompt).group(1)
         other = next(n for n in self.names if n != speaker)
         if "opens today's discussion" in user_prompt or "moves the discussion forward" in user_prompt:
             n = sum(1 for c in self.calls if "moves the discussion forward" in c[2] or "opens today's" in c[2])
@@ -350,7 +350,7 @@ def test_a_lead_with_nothing_to_say_hands_the_floor_on(gm, io):
 
     class Mute(ScriptedLLM):
         def generate_json(self, system_prompt, user_prompt, *a, **k):
-            speaker = re.match(r"You are (\w+)", system_prompt).group(1)
+            speaker = re.match(r"You are (.+?), the ", system_prompt).group(1)
             if "opens today's discussion" in user_prompt and not first:
                 first["who"] = speaker
                 self.calls.append(("json", system_prompt, user_prompt))
