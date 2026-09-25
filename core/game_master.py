@@ -108,7 +108,10 @@ class GameMaster:
         roster = []
         for name in self.state.alive_characters:
             if name == "Player":
-                entry = "- Player: A traveler that arrived just to stay the night."
+                traits = " and ".join(self.crime_scene_config.get("player_tags", []))
+                arrived = "tonight" if self.state.day == 0 else "the night before the first killing"
+                entry = (f"- Player: A traveler who arrived {arrived}, to stay the night"
+                         f"{f', with {traits}' if traits else ''}. Nobody knows anything else about them.")
             else:
                 char_obj = self.characters.get(name)
                 if not char_obj:
@@ -155,8 +158,10 @@ class GameMaster:
             lines.append(f"- {r['speaker']}{aimed} ({r['intent']}){said}")
         return "\n".join(lines)
 
-    def get_public_record_text(self, limit: int = 15) -> str:
-        """Today's public actions, one per line, oldest first."""
+    def get_public_record_text(self, limit: int = 20, quote_chars: int = 160) -> str:
+        """Today's public actions, one per line, oldest first, each with the gist of what was said.
+        The words matter: without them a denial scrolls out of the chat window and a claim about
+        what someone said hardens into fact."""
         today = [r for r in self.state.public_record if r["day"] == self.state.day][-limit:]
         lines = []
         for r in today:
@@ -167,7 +172,10 @@ class GameMaster:
                 if "{target}" in phrase and r["target"] == "None":
                     phrase = phrase.replace(" {target}", "")
                 action = phrase.format(target=r["target"])
-            lines.append(f"- {r['speaker']} {action}")
+            said = " ".join((r.get("dialogue") or "").split())
+            if len(said) > quote_chars:
+                said = said[:quote_chars].rsplit(" ", 1)[0] + "..."
+            lines.append(f"- {r['speaker']} {action}" + (f': "{said}"' if said else ""))
         return "\n".join(lines)
 
     def get_claims_text(self) -> str:
@@ -228,17 +236,18 @@ class GameMaster:
     def get_game_context(self) -> str:
         """Builds a situational summary: the stakes, what the village woke up to, the last verdict."""
         state = self.state
-        lines = [
-            "Werewolves hide among the villagers. Each day the town talks and votes to hang a suspect; "
-            "each night the wolves kill someone.",
-            state.morning_event,
-        ]
+        lines = [state.morning_event]
         if state.day > 0:
-            if state.last_verdict and state.last_verdict["day"] == state.day - 1:
-                lines.append(f"Yesterday: {state.last_verdict['text']}")
-            vote_events = [e for e in state.public_events if e.startswith(f"Day {state.day - 1} votes:")]
-            if vote_events:
-                lines.append(vote_events[-1])
+            lines.insert(0, "Werewolves hide among the villagers. Each day the town talks and votes to hang a "
+                            "suspect; each night the wolves kill someone.")
+            # After today's vote (aftermath, evening chats) the latest verdict is today's, not yesterday's
+            verdict = state.last_verdict
+            if verdict and verdict["day"] in (state.day, state.day - 1):
+                when = "Today" if verdict["day"] == state.day else "Yesterday"
+                lines.append(f"{when}: {verdict['text']}")
+                vote_events = [e for e in state.public_events if e.startswith(f"Day {verdict['day']} votes:")]
+                if vote_events:
+                    lines.append(vote_events[-1])
             evidence = state.clues.render_public()
             if evidence:
                 lines.append(f"Evidence so far: {evidence}")

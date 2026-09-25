@@ -415,6 +415,7 @@ class NPCController:
             chat_history=self.gm.state.chat_history,
             is_pressure=is_pressure,
             character=char_obj,
+            game_context=self.gm.get_game_context(),
         )
 
         raw_dialogue = self.gm.llm.generate_text(system_prompt, reveal_prompt).strip().strip('"') or f"I am the {label}."
@@ -463,6 +464,7 @@ class NPCController:
             new_findings=new_findings,
             chat_history=self.gm.state.chat_history,
             character=char_obj,
+            game_context=self.gm.get_game_context(),
         )
 
         dialogue = self.gm.llm.generate_text(system_prompt, report_prompt).strip().strip('"') or None

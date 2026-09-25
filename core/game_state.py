@@ -20,8 +20,12 @@ class GamePhase(Enum):
     GAME_OVER = 7
 
 
-PREMISE = ("A traveler arrives at a small, isolated village as night falls. "
-           "Folk whisper that something has been hunting in the woods.")
+PREMISE = "A traveler arrives at a small, isolated village in the pines as night falls."
+
+# What is true on the night the traveler arrives. Without it the model invents earlier victims and trouble.
+ARRIVAL_FACTS = ("It is an ordinary evening: nothing unusual has happened in the village, nobody has died, and "
+                 "nobody has been accused of anything. Strangers are rare here, so the villagers are curious "
+                 "about the newcomer, some warmly, some warily.")
 
 class GameState:
     def __init__(self, characters: list, config: dict):
@@ -50,7 +54,7 @@ class GameState:
         self.reveal_pressure = {}  # {name: claimed_role} — set when someone claims your role
         self.game_result = None  # Set by GameMaster.end_game
         self.roles_known = False  # Characters learn their own role at night 0
-        self.morning_event = PREMISE  # What everyone woke up to: the premise, then each morning's news
+        self.morning_event = f"{PREMISE} {ARRIVAL_FACTS}"  # What everyone woke up to: the premise, then each morning's news
 
         # Add the Player to the alive roster implicitly
         self.alive_characters = [c.name for c in characters] + ["Player"]

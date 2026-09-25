@@ -83,3 +83,30 @@ def test_chat_menu_is_drawn_once_per_day(gm, llm, io):
     first = list(gm.state.chat_options[2])
     ChatsPhase(gm).run()
     assert gm.state.chat_options[2] == first and len(first) == 5
+
+
+def test_evening_chat_remembers_todays_vote(gm, llm):
+    state = gm.state
+    elara, silas = npcs(gm)[:2]
+    state.day = 1
+    state.votes_by_day[1] = {"Player": silas, elara: "Player", silas: "Player"}
+    state.public_events.append(f"Day 1 votes: Player -> {silas}, {elara} -> Player, {silas} -> Player.")
+    state.last_verdict = {"day": 1, "hanged": silas, "text": f"The town hanged {silas}.", "drew_votes": []}
+    llm.text_answers = ["Yes, I voted for you."]
+    gm.conversation_controller.reply(elara, [], private=True)
+    assert "At today's vote you voted to hang the traveler" in llm.last_prompt
+    assert f"Today: The town hanged {silas}." in llm.last_prompt
+    assert f"{elara} -> Player" in llm.last_prompt
+
+
+def test_public_claimant_may_speak_of_their_claim_in_private(gm, llm):
+    learn_roles(gm)
+    coroner = next((n for n, r in gm.state.roles.items() if r == "coroner" and n != "Player"), None)
+    if not coroner:
+        return
+    gm.state.revealed_roles[coroner] = "coroner"
+    llm.text_answers = ["I am the Coroner, and I stand by what I found."]
+    line = gm.conversation_controller.reply(coroner, [], private=True)
+    assert line.startswith("I am the Coroner")
+    assert "already claimed to be the Coroner" in llm.last_prompt
+    assert "ROLE CLAIMS MADE IN PUBLIC" in llm.last_prompt
