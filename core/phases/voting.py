@@ -1,6 +1,7 @@
 import time
 from collections import Counter
 
+from core.dialogue_cache import DialoguePrefetcher
 from core.game_state import GamePhase, WIN_MESSAGES
 from core.trust_manager import TrustManager
 
@@ -18,13 +19,18 @@ class VotingPhase:
         io = gm.io
         state = gm.state
 
+        # NPC votes are decided in the background (one LLM call per side) while the player chooses
+        npc_voters = [name for name in state.alive_characters if name != "Player"]
+        prefetcher = DialoguePrefetcher()
+        prefetcher.submit(gm.npc_controller.decide_votes, npc_voters)
+
         player_vote = gm.player_controller.get_vote()
 
-        # NPC votes are instant (stat engine, no LLM)
-        npc_voters = [name for name in state.alive_characters if name != "Player"]
-        npc_vote_results = {}
-        for npc in npc_voters:
-            npc_vote_results[npc] = gm.npc_controller.generate_vote(npc)
+        io.show_system("The townsfolk make up their minds...", style="muted")
+        npc_vote_results, _ = prefetcher.get()
+        prefetcher.shutdown()
+        if npc_vote_results is None:
+            npc_vote_results = {npc: gm.stat_engine.compute_vote(npc) for npc in npc_voters}
 
         # Reveal
         io.show_phase("THE VERDICT", state.day)
@@ -33,6 +39,8 @@ class VotingPhase:
         self._reveal_player_vote(player_vote)
         self._reveal_npc_votes(npc_voters, npc_vote_results, all_votes)
 
+        ballots = ", ".join(f"{v} -> {t}" for v, t in all_votes.items() if t != "None")
+        state.public_events.append(f"Day {state.day} votes: {ballots or 'everyone abstained'}.")
         self._tally_and_execute(all_votes)
 
     def _reveal_player_vote(self, player_vote):

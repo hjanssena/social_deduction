@@ -1,6 +1,7 @@
 import random
 from enum import Enum
 from core.trust_manager import TrustManager
+from models.logbook import seed_logbooks
 
 WIN_MESSAGES = {
     "village_wins": "\n\033[92m[VICTORY] All werewolves have been eliminated! The village is safe.\033[0m",
@@ -21,6 +22,7 @@ class GameState:
         self.chat_history = []
         self.logical_history = []
         self.public_events = [] 
+        self.public_record = []  # [{day, speaker, intent, target, note, dialogue}] — every public action, see GameMaster.record_action
         self.player_actions_today = 0
         self.killed_last_night = []
         self.ga_protected_tonight = None
@@ -70,6 +72,18 @@ class GameState:
             assigned += 1
         for i in range(assigned, len(pool)):
             self.roles[pool[i]] = "villager"
+
+        # --- Private logbooks with randomized starting allegiances ---
+        npc_names = [c.name for c in characters]
+        self.logbooks = seed_logbooks(npc_names, self.roles, config.get("logbook", {}))
+
+        # Transitional: keep the stat engine consistent with the logbook allegiances
+        # until the LLM takes over decisions (stage 3 removes the trust matrix).
+        for name, book in self.logbooks.items():
+            for friend in book.friends:
+                self.trust_matrix[name][friend] = random.randint(70, 85)
+            for enemy in book.enemies:
+                self.trust_matrix[name][enemy] = random.randint(15, 30)
 
     def check_win_condition(self) -> str | None:
         """Returns 'village_wins', 'werewolves_win', or None if the game continues."""

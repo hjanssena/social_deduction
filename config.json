@@ -6,15 +6,16 @@
         "coroner_count": 1
     },
     "discussion": {
-        "_docs": "Controls the discussion phase loop. decay_factor: multiplier applied to a speaker's bid weight each time they speak (lower = less likely to speak again soon). max_assertions_per_day: total assertion slots per day. speaker_weight_decay: unused legacy key. chat_history_window: how many recent chat lines the LLM prompts receive. player_min_actions: minimum player actions before silence penalty triggers. player_max_actions: maximum player actions before domination penalty triggers. global_trust_penalty: flat trust penalty applied to the player for being too quiet. silence_under_fire_penalty: trust penalty when the player refuses to defend against a direct accusation.",
+        "_docs": "Controls the discussion phase loop. decay_factor: multiplier applied to a speaker's bid weight each time they speak (lower = less likely to speak again soon). max_assertions_per_day: total assertion slots per day. speaker_weight_decay: unused legacy key. chat_history_window: how many recent chat lines the LLM prompts receive. max_reactions_per_assertion: at most this many NPCs are asked to react to each assertion (each may choose to stay silent); the accused always gets a chance. player_min_actions: minimum player actions before silence penalty triggers. player_max_actions: maximum player actions before domination penalty triggers. global_trust_penalty: flat trust penalty applied to the player for being too quiet. silence_under_fire_penalty: trust penalty when the player refuses to defend against a direct accusation.",
         "decay_factor": 0.2,
         "max_assertions_per_day": 6,
         "speaker_weight_decay": 0.25,
-        "chat_history_window": 5,
+        "chat_history_window": 8,
         "player_min_actions": 2,
         "player_max_actions": 7,
         "global_trust_penalty": 5,
-        "silence_under_fire_penalty": 10
+        "silence_under_fire_penalty": 10,
+        "max_reactions_per_assertion": 3
     },
     "engine": {
         "_docs": "All parameters for the deterministic StatEngine. Organized by subsystem.",
@@ -67,58 +68,15 @@
             "default_threat_level": 25,
             "revealed_role_bonus": 60
         },
-        "assertion": {
-            "_docs": "Controls how villagers pick assertion intents. accuse_base_weight: base probability weight for accusing. accuse_low_logic_bonus: extra accuse weight when logic_vs_emotion is below low_logic_threshold (emotional characters accuse more). low_logic_threshold: logic_vs_emotion at or below this is considered 'emotional'. question_base_weight: base probability weight for questioning. question_high_logic_bonus: extra question weight when logic_vs_emotion is at or above high_logic_threshold (logical characters question more). high_logic_threshold: logic_vs_emotion at or above this is considered 'logical'. neutral_min_weight: minimum probability weight for neutral assertions. low_ad_threshold: assertion_drive at or below this is considered 'passive'. low_ad_neutral_bonus: extra neutral weight for passive characters. suspicion_target_threshold: minimum suspicion score before a target is considered for accusation/questioning.",
-            "accuse_base_weight": 55,
-            "accuse_low_logic_bonus": 15,
-            "low_logic_threshold": 4,
-            "question_base_weight": 30,
-            "question_high_logic_bonus": 10,
-            "high_logic_threshold": 7,
-            "neutral_min_weight": 5,
-            "low_ad_threshold": 4,
-            "low_ad_neutral_bonus": 30,
-            "suspicion_target_threshold": 10
-        },
         "werewolf": {
-            "_docs": "Werewolf-specific decision tuning. packmate_defense_divisor: performance/this = chance to defend a packmate (higher = less likely). deflect_performance_threshold: minimum performance to deflect instead of defend_self when accused. reaction_deflect_threshold: minimum performance to deflect in reactions (vs defend_self). reaction_packmate_defense_divisor: performance/this = chance to defend packmate in reactions. reaction_bandwagon_chance: probability of agreeing when an innocent is being accused (pile-on). fake_suspicion_innocent_weight: voting weight for innocents when faking suspicion scores. fake_suspicion_wolf_weight: voting weight for fellow wolves when faking suspicion scores (low = protect pack). voluntary_reveal_performance_threshold: minimum performance to attempt a voluntary fake role claim. voluntary_reveal_chance: probability of a qualifying wolf actually making the fake claim.",
-            "packmate_defense_divisor": 10,
-            "deflect_performance_threshold": 5,
-            "reaction_deflect_threshold": 6,
-            "reaction_packmate_defense_divisor": 12,
-            "reaction_bandwagon_chance": 0.4,
+            "_docs": "Werewolf-specific decision tuning. fake_suspicion_innocent_weight: voting weight for innocents when faking suspicion scores. fake_suspicion_wolf_weight: voting weight for fellow wolves when faking suspicion scores (low = protect pack). voluntary_reveal_performance_threshold: minimum performance to attempt a voluntary fake role claim. voluntary_reveal_chance: probability of a qualifying wolf actually making the fake claim.",
             "fake_suspicion_innocent_weight": 80,
             "fake_suspicion_wolf_weight": 5,
             "voluntary_reveal_performance_threshold": 7,
             "voluntary_reveal_chance": 0.05
         },
-        "reaction": {
-            "_docs": "Controls how NPCs decide to react to assertions. disagree_suspicion_threshold: minimum suspicion toward a target before disagreeing with their defender. agree_suspicion_threshold: minimum suspicion toward the accused before agreeing with the accuser. agree_cold_start_trust_threshold: if trust toward the accused is below this, the reactor may agree even without suspicion data. agree_cold_start_chance: probability of cold-start agreement triggering. agree_general_trust_threshold: minimum trust toward the speaker to agree with non-accusation statements. agree_general_chance: probability of general agreement triggering. defend_other_friendly_chance: probability of defending a 'friendly' (55+ trust) ally when they're attacked (allied 75+ always defends).",
-            "disagree_suspicion_threshold": 40,
-            "agree_suspicion_threshold": 10,
-            "agree_cold_start_trust_threshold": 40,
-            "agree_cold_start_chance": 0.4,
-            "agree_general_trust_threshold": 60,
-            "agree_general_chance": 0.25,
-            "defend_other_friendly_chance": 0.6
-        },
-        "contrarian": {
-            "_docs": "Controls the contrarian disagreement roll. index_divisor: contrarian_index/this = base chance to disagree. trust_center: trust values above this reduce contrarian chance. trust_divisor: how much trust above center reduces the chance (higher = less reduction).",
-            "index_divisor": 10.0,
-            "trust_center": 50,
-            "trust_divisor": 100
-        },
-        "emotion": {
-            "_docs": "Emotion derivation. logic_threshold: logic_vs_emotion at or below this uses the 'emotional' pool; above uses the 'logical' pool.",
-            "logic_threshold": 5
-        },
         "history_window": 3,
         "_docs_history_window": "How many recent logical_history entries to scan when checking if someone is under attack.",
-        "ally_defense": {
-            "_docs": "Controls probabilistic ally defense for 'friendly' trust tier (55-74). friendly_probability_divisor: (trust - friendly_threshold) / this = bonus defend chance. friendly_base_chance: base probability added to the bonus chance.",
-            "friendly_probability_divisor": 40,
-            "friendly_base_chance": 0.2
-        },
         "reveal": {
             "_docs": "Controls role reveal decisions. Checked for ALL alive NPCs between every assertion round (not gated by speaker bids), so probabilities are per-round. pressure_base_chance: per-round probability for a real role holder to counter-reveal when someone claims their role. pressure_ad_divisor: assertion_drive/this is added to the base chance. wolf_pressure_performance_threshold: minimum performance for a wolf to consider counter-claiming under pressure. wolf_pressure_chance_divisor: performance/this = per-round wolf counter-claim probability. ga_voluntary_chance: per-round probability the GA reveals voluntarily when under attack and has protection history. coroner_wolf_finding_chance: per-round probability the coroner reveals when they have werewolf findings. coroner_no_wolf_chance: per-round probability the coroner reveals when they only have non-wolf findings. coroner_under_attack_bonus: added to reveal chance when the coroner is being accused.",
             "pressure_base_chance": 0.8,
@@ -126,14 +84,27 @@
             "wolf_pressure_performance_threshold": 6,
             "wolf_pressure_chance_divisor": 15,
             "ga_voluntary_chance": 0.2,
-            "coroner_wolf_finding_chance": 0.40,
+            "coroner_wolf_finding_chance": 0.4,
             "coroner_no_wolf_chance": 0.15,
             "coroner_under_attack_bonus": 0.3
         }
     },
+    "logbook": {
+        "_docs": "Private per-character logbooks. friends_count / enemies_count: [min, max] random starting friends / enemies per NPC, drawn from the other NPCs (the Player always starts as a stranger). max_entries_in_prompt: how many of the most recent entries are included in each prompt.",
+        "friends_count": [
+            1,
+            2
+        ],
+        "enemies_count": [
+            1,
+            1
+        ],
+        "max_entries_in_prompt": 12
+    },
     "debug": {
-        "_docs": "Debug display toggles. show_logic: print engine decisions (intent, target, emotion, reasoning) in yellow/gray.",
-        "show_logic": false
+        "_docs": "Debug display toggles. show_logic: print each character's decision (intent, target, emotion, private thought) in gray. dump_logbooks: write every logbook to logs/<game>/<name>.md after each phase.",
+        "show_logic": false,
+        "dump_logbooks": false
     },
     "llm": {
         "_docs": "LLM backend configuration. backend: 'llamacpp' for local GGUF, 'gpt4all' for local GGUF via GPT4All, 'ollama' for Ollama API, or 'openai' for any OpenAI-compatible API. model_path: path to GGUF file (llamacpp/gpt4all). chat_format: tokenizer chat template (llamacpp only). model: model name for Ollama. ollama_url: Ollama API endpoint. openai: settings for the 'openai' backend.",

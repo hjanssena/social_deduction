@@ -15,6 +15,10 @@ class ProloguePhase:
 
         io.show_phase("THE GATHERING", state.day)
 
+        io.show_system("The townsfolk gather their thoughts...", style="muted")
+        for name in state.logbooks:
+            gm.npc_controller.write_opening_entry(name)
+
         io.show_narration("The wind howls against the thick wooden shutters of the local tavern.")
         io.show_narration("In a settlement this small, a sudden gathering called by the Mayor is never a good sign.")
         io.show_narration("The handful of residents murmur nervously, their faces illuminated by the flickering hearth.")

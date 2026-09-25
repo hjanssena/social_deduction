@@ -155,6 +155,7 @@ class DiscussionPhase:
             state.public_events.append(
                 f"Day {state.day}: {speaker_name} claimed to be the {label}."
             )
+            gm.record_action(speaker_name, "reveal_role", note=f"claimed to be the {label}", dialogue=data.get("dialogue", ""))
         else:
             emotion = data.get("emotion", "neutral")
             reasoning = data.get("reasoning", "")
@@ -164,6 +165,7 @@ class DiscussionPhase:
                 f"{speaker_name} [{intent}] -> {target} (Emotion: {emotion}). Reason: {reasoning}"
             )
             TrustManager.apply_interaction(state, speaker_name, target, intent, gm.characters)
+            gm.record_action(speaker_name, intent, target, dialogue=data.get("dialogue", ""))
 
             # Suspicion updates for public events
             if intent == "deflect" and target == "None":
@@ -222,6 +224,7 @@ class DiscussionPhase:
         state.logical_history.append(
             f"{reactor_name} [{intent}] -> {target} (Emotion: {emotion}). Reason: {reasoning}"
         )
+        gm.record_action(reactor_name, intent, target, dialogue=data.get("dialogue", ""))
         TrustManager.apply_interaction(state, reactor_name, primary_speaker, intent, gm.characters)
         if target != "None" and target != primary_speaker:
             TrustManager.apply_interaction(state, reactor_name, target, intent, gm.characters)
@@ -372,7 +375,7 @@ class DiscussionPhase:
                 f"Townspeople! {state.main_topic} "
                 f"Word has spread that werewolves have infiltrated our village. "
                 f"{wolf_warning} "
-                f"Speak now — accuse, defend, or question. {alive_count} souls remain."
+                f"Speak now: share what you know, ask your questions, and choose carefully whom to trust. {alive_count} souls remain."
             )
 
         # Day 1+: reference last night's events

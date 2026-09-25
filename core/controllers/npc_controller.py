@@ -1,4 +1,7 @@
 import random
+from difflib import SequenceMatcher
+
+from services.prompt_service import NPC_INTENTS, NPC_REACTION_INTENTS, VALID_EMOTIONS
 
 
 class NPCController:
@@ -21,33 +24,53 @@ class NPCController:
         return chosen_speaker
 
     def build_reaction_queue(self, primary_speaker: str, target: str) -> list[str]:
-        """Determines which NPCs want to react based on emotional charge."""
-        queue = []
-        emotional_threshold = 10
+        """Picks who gets a chance to react: the target first, then NPCs with a stake read off
+        their allegiance tables (the target's friends and packmates before anyone who merely
+        knows the speaker or target), then one random bystander. Each may still stay silent."""
+        alive_npcs = [n for n in self.gm.state.alive_characters if n not in ("Player", primary_speaker)]
+        queue = [target] if target in alive_npcs else []
 
-        if target in self.gm.state.alive_characters and target != primary_speaker and target != "Player":
-            queue.append(target)
+        def stake(npc):
+            book = self.gm.state.logbooks.get(npc)
+            if not book:
+                return 0
+            if target in book.pack or book.relation_to(target) == "friend":
+                return 2
+            involved = [n for n in (primary_speaker, target) if n not in ("None", "Player")]
+            return 1 if any(book.relation_to(n) or n in book.pack for n in involved) else 0
 
-        potential_reactors = [n for n in self.gm.state.alive_characters
-                              if n not in queue and n != primary_speaker and n != "Player"]
+        others = [n for n in alive_npcs if n not in queue]
+        random.shuffle(others)
+        others.sort(key=stake, reverse=True)
+        concerned = [n for n in others if stake(n) > 0]
+        bystanders = [n for n in others if stake(n) == 0]
 
-        npc_scores = {}
-        for npc in potential_reactors:
-            trust_speaker = self.gm.state.trust_matrix[npc].get(primary_speaker, 50)
-            charge_speaker = abs(trust_speaker - 50)
+        cap = self.gm.config.get("max_reactions_per_assertion", 3)
+        return (queue + concerned + bystanders[:1])[:max(cap, len(queue))]
 
-            charge_target = 0
-            if target in self.gm.state.alive_characters:
-                trust_target = self.gm.state.trust_matrix[npc].get(target, 50)
-                charge_target = abs(trust_target - 50)
+    # ================================================================
+    # LOGBOOKS
+    # ================================================================
 
-            max_charge = max(charge_speaker, charge_target)
-            if max_charge >= emotional_threshold:
-                npc_scores[npc] = max_charge
-
-        sorted_bystanders = sorted(npc_scores, key=npc_scores.get, reverse=True)
-        queue.extend(sorted_bystanders)
-        return queue
+    def write_opening_entry(self, name: str):
+        """Has a character explain their starting friends and enemies in their own logbook."""
+        char_obj = self.gm.characters[name]
+        book = self.gm.state.logbooks[name]
+        others_text = "\n".join(
+            f"- {c.name}: {c.occupation}. {c.bio}"
+            for c in self.gm.characters.values() if c.name != name
+        )
+        system = self._system_prompt(name)
+        prompt = self.gm.prompt_builder.build_logbook_seed_prompt(
+            character=char_obj,
+            friends=book.friends,
+            enemies=book.enemies,
+            others_text=others_text,
+            situation=self.gm.state.main_topic,
+            pack=book.pack,
+        )
+        entry = self.gm.llm.generate_text(system, prompt)
+        book.add_entry(self.gm.state.day, "Prologue", entry.strip().strip('"'))
 
     # ================================================================
     # REVEAL PIPELINE (called between assertions, not from bids)
@@ -60,63 +83,156 @@ class NPCController:
         return self._handle_role_reveal(speaker_name, char_obj, role, engine_result)
 
     # ================================================================
-    # ASSERTION PIPELINE: StatEngine → single LLM call (reasoning + dialogue)
+    # SHARED PROMPT PIECES
+    # ================================================================
+
+    def _system_prompt(self, name: str) -> str:
+        """Role-aware system prompt with the character's private logbook."""
+        state = self.gm.state
+        role = state.roles.get(name, "villager")
+        return self.gm.prompt_builder.build_system_prompt(
+            self.gm.characters[name], role,
+            known_werewolves=[n for n, r in state.roles.items() if r == "werewolf" and n in state.alive_characters],
+            coroner_knowledge=state.coroner_knowledge if role == "coroner" else None,
+            ga_protection_history=state.ga_protection_history if role == "guardian_angel" else None,
+            logbook_text=self.gm.get_logbook_text(name),
+        )
+
+    def _context_kwargs(self, name: str) -> dict:
+        return {
+            "character": self.gm.characters[name],
+            "day": self.gm.state.day,
+            "game_context": self.gm.get_game_context(),
+            "roster_text": self.gm.get_roster_text(viewer=name),
+            "claims_text": self.gm.get_claims_text(),
+            "record_text": self.gm.get_public_record_text(),
+            "chat_history": list(self.gm.state.chat_history),
+            "history_window": self.gm.config.get("chat_history_window", 8),
+        }
+
+    def _stakes_text(self, name: str, speaker: str = None, target: str = None) -> str:
+        """Engine-routed facts that concern this character personally, read off their allegiance
+        table: attacks on them, their friends, enemies or packmates today, and how they relate
+        to whoever is speaking now."""
+        book = self.gm.state.logbooks.get(name)
+        if not book:
+            return ""
+        lines, described = [], set()
+        today = [r for r in self.gm.state.public_record if r["day"] == self.gm.state.day]
+        for r in today[-10:]:
+            if r["intent"] not in ("accuse", "question", "defend_other") or r["speaker"] == name:
+                continue
+            verb = {"accuse": "accused", "question": "questioned", "defend_other": "defended"}[r["intent"]]
+            who = r["target"]
+            if who == name:
+                lines.append(f"{r['speaker']} {verb} you.")
+            elif who in book.pack:
+                lines.append(f"{r['speaker']} {verb} your packmate {who}.")
+                described.add(who)
+            elif book.relation_to(who):
+                lines.append(f"{r['speaker']} {verb} your {book.relation_to(who)} {who}.")
+                described.add(who)
+
+        for who in (speaker, target):
+            if who in (None, "None", name, "Player") or who in described:
+                continue
+            if who in book.pack:
+                lines.append(f"{who} is your fellow werewolf (secret).")
+            elif book.relation_to(who):
+                lines.append(f"{who} is your {book.relation_to(who)}.")
+        return "\n".join(dict.fromkeys(lines))
+
+    TARGETED_INTENTS = {"accuse", "question", "defend_other", "agree", "disagree"}
+
+    def _validate_decision(self, data: dict, name: str, allowed: str, fallback_target: str = "None") -> dict:
+        """Turns the model's JSON into a legal action: a known intent, a living target that
+        isn't the speaker (or None), a known emotion, and a cleaned-up line of dialogue."""
+        data = data or {}
+        intent = str(data.get("intent", "neutral")).strip().lower().replace(" ", "_").replace("-", "_")
+        target = self.gm.sanitize_target(str(data.get("target", "None")))
+        dialogue = str(data.get("dialogue") or "").strip().strip('"').strip()
+
+        if intent == "defend":
+            intent = "defend_other" if target not in ("None", name) else "defend_self"
+        if intent not in allowed.split("|"):
+            intent = "neutral"
+        if target == name:
+            target = "None"
+            if intent == "defend_other":
+                intent = "defend_self"
+
+        if intent in self.TARGETED_INTENTS and target == "None":
+            if intent in ("agree", "disagree") and fallback_target not in ("None", name):
+                target = fallback_target
+            else:
+                found = self.gm.sanitize_target(dialogue) if dialogue else "None"
+                if found not in ("None", name):
+                    target = found
+                else:
+                    intent = "neutral"
+        if intent not in self.TARGETED_INTENTS:
+            target = "None"
+
+        emotion = str(data.get("emotion", "neutral")).strip().lower()
+        if emotion not in VALID_EMOTIONS.split("|"):
+            emotion = "neutral"
+
+        return {
+            "intent": intent,
+            "target": target,
+            "emotion": emotion,
+            "reasoning": str(data.get("thought", "")).strip(),
+            "dialogue": dialogue,
+        }
+
+    def _decide(self, name: str, prompt: str, allowed: str, fallback_target: str = "None") -> dict:
+        """One LLM call that decides and speaks, validated. If the line nearly repeats something
+        this character already said, retries once naming that line (small models otherwise
+        loop on their stock sayings)."""
+        system = self._system_prompt(name)
+        result = self._validate_decision(
+            self.gm.llm.generate_json(system, prompt, True), name, allowed, fallback_target)
+        repeated = self._repeated_line(name, result["dialogue"])
+        if repeated:
+            retry = prompt + f'\n\nYou already said: "{repeated}". Say something different this time.'
+            result = self._validate_decision(
+                self.gm.llm.generate_json(system, retry, True), name, allowed, fallback_target)
+        return result
+
+    def _repeated_line(self, name: str, dialogue: str) -> str | None:
+        """Returns the earlier line of this character's that `dialogue` nearly repeats, if any."""
+        if not dialogue:
+            return None
+        own = [r["dialogue"] for r in self.gm.state.public_record if r["speaker"] == name and r.get("dialogue")]
+        for line in own[-5:]:
+            if SequenceMatcher(None, dialogue.lower(), line.lower()).ratio() >= 0.7:
+                return line
+        return None
+
+    # ================================================================
+    # ASSERTION PIPELINE: one LLM call decides and speaks, the engine validates
     # ================================================================
 
     def generate_assertion(self, speaker_name: str, current_assertion: int) -> dict:
         """Pure generation — no state mutations, no display. Caller applies side effects."""
-        char_obj = self.gm.characters[speaker_name]
-        role = self.gm.state.roles.get(speaker_name, "villager")
-
-        # --- STEP 1: StatEngine ---
-        engine_result = self.gm.stat_engine.compute_assertion(speaker_name)
-        intent = engine_result["intent"]
-        target = engine_result["target"]
-        emotion = engine_result["emotion"]
-        engine_reasoning = engine_result["engine_reasoning"]
-
-        # --- STEP 2: Single LLM call (reasoning → dialogue) ---
-        werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
-        ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
-        system = self.gm.prompt_builder.build_system_prompt(
-            char_obj, role, known_werewolves=werewolves,
-            coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history,
-        )
         prompt = self.gm.prompt_builder.build_assertion_prompt(
-            character_name=speaker_name,
-            intent=intent,
-            target=target,
-            emotion=emotion,
-            engine_reasoning=engine_reasoning,
-            chat_history=self.gm.state.chat_history,
-            main_topic=self.gm.state.main_topic,
-            roster_text=self.gm.get_roster_text(viewer=speaker_name),
-            character=char_obj,
-            claims_text=self.gm.get_claims_text(),
-            game_context=self.gm.get_game_context(),
+            stakes_text=self._stakes_text(speaker_name),
+            **self._context_kwargs(speaker_name),
         )
-        
-        data = self.gm.llm.generate_json(system, prompt, True)
-        #print(data)
-        raw_dialogue = data.get("dialogue", "... (Glares in silence)") if data else "... (Glares in silence)"
-
-        return {
-            "dialogue": raw_dialogue,
-            "intent": intent,
-            "target": target,
-            "emotion": emotion,
-            "reasoning": engine_reasoning,
-        }
+        result = self._decide(speaker_name, prompt, NPC_INTENTS)
+        if not result["dialogue"]:
+            result.update(intent="neutral", target="None", dialogue="... (Glares in silence)")
+        return result
 
     # ================================================================
-    # REACTION PIPELINE: StatEngine → single LLM call (reasoning + dialogue)
+    # REACTION PIPELINE: one LLM call decides whether and how to react
     # ================================================================
 
     def process_reaction(self, primary_speaker: str, assertion_data: dict,
                          reactor_name: str, current_assertion: int,
                          reaction_chain: list = None):
         """Pure generation — no state mutations, no display. Caller applies side effects.
+        Returns None when the reactor chooses to stay silent.
 
         Args:
             primary_speaker: The original asserter's name.
@@ -125,67 +241,22 @@ class NPCController:
             current_assertion: Index of current assertion round.
             reaction_chain: List of {speaker, dialogue, intent} dicts for reactions so far.
         """
-        reactor_obj = self.gm.characters[reactor_name]
-        role = self.gm.state.roles.get(reactor_name, "villager")
-
-        # Engine ALWAYS reasons about the original assertion
-        speaker_intent = assertion_data.get("intent", "neutral")
         speaker_target = assertion_data.get("target", "None")
-        speaker_dialogue = assertion_data.get("dialogue", "...")
-
-        # --- STEP 1: StatEngine ---
-        engine_result = self.gm.stat_engine.compute_reaction(
-            reactor_name, primary_speaker, speaker_intent, speaker_target
+        prompt = self.gm.prompt_builder.build_reaction_prompt(
+            assertion_speaker=primary_speaker,
+            assertion_target=speaker_target,
+            assertion_dialogue=assertion_data.get("dialogue", "..."),
+            reaction_chain=list(reaction_chain or []),
+            stakes_text=self._stakes_text(reactor_name, primary_speaker, speaker_target),
+            **self._context_kwargs(reactor_name),
         )
-        if engine_result is None:
+        result = self._decide(reactor_name, prompt, NPC_REACTION_INTENTS, fallback_target=primary_speaker)
+        if result["intent"] == "silent" or not result["dialogue"]:
             return None
 
-        intent = engine_result["intent"]
-        target = engine_result["target"]
-        emotion = engine_result["emotion"]
-        engine_reasoning = engine_result["engine_reasoning"]
-        intensity = engine_result.get("intensity", "medium")
-
-        # --- STEP 2: Single LLM call (reasoning → dialogue) ---
-        chain = reaction_chain or []
-        werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
-        ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
-        system = self.gm.prompt_builder.build_system_prompt(
-            reactor_obj, role, known_werewolves=werewolves,
-            coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history,
-        )
-        prompt = self.gm.prompt_builder.build_reaction_prompt(
-            character_name=reactor_name,
-            intent=intent,
-            target=target,
-            emotion=emotion,
-            engine_reasoning=engine_reasoning,
-            assertion_speaker=primary_speaker,
-            assertion_dialogue=speaker_dialogue,
-            reaction_chain=chain,
-            main_topic=self.gm.state.main_topic,
-            roster_text=self.gm.get_roster_text(viewer=reactor_name),
-            character=reactor_obj,
-            claims_text=self.gm.get_claims_text(),
-            game_context=self.gm.get_game_context(),
-        )
-        data = self.gm.llm.generate_json(system, prompt, True)
-        raw_dialogue = data.get("dialogue", "... (Glares in silence)") if data else "... (Glares in silence)"
-        # print(data)
-        # raw_dialogue = self.gm.llm.generate_text(system, prompt)
-        # if not raw_dialogue or raw_dialogue.isspace():
-        #     raw_dialogue = "... (Glares in silence)"
-
-        return {
-            "dialogue": raw_dialogue.strip().strip('"'),
-            "intent": intent,
-            "target": target,
-            "emotion": emotion,
-            "reasoning": engine_reasoning,
-            "primary_speaker": primary_speaker,
-            "intensity": intensity,
-        }
+        result["primary_speaker"] = primary_speaker
+        result["intensity"] = "high" if speaker_target == reactor_name else "medium"
+        return result
 
     # ================================================================
     # ROLE REVEALS & MORNING REPORTS
@@ -201,10 +272,7 @@ class NPCController:
         label = ROLE_LABELS.get(claimed_role, claimed_role)
 
         # Build system prompt (role-aware so the actor knows if they're lying)
-        werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        system_prompt = self.gm.prompt_builder.build_system_prompt(
-            char_obj, role, known_werewolves=werewolves,
-        )
+        system_prompt = self._system_prompt(char_obj.name)
 
         reveal_prompt = self.gm.prompt_builder.build_role_reveal_prompt(
             character_name=speaker_name,
@@ -215,8 +283,7 @@ class NPCController:
             character=char_obj,
         )
 
-        reveal_data = self.gm.llm.generate_json(system_prompt, reveal_prompt, use_narrative_cfg=True)
-        raw_dialogue = reveal_data.get("dialogue", f"I am the {label}.") if reveal_data else f"I am the {label}."
+        raw_dialogue = self.gm.llm.generate_text(system_prompt, reveal_prompt).strip().strip('"') or f"I am the {label}."
 
         return {
             "dialogue": raw_dialogue,
@@ -254,10 +321,7 @@ class NPCController:
         if not new_findings:
             return None
 
-        werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        system_prompt = self.gm.prompt_builder.build_system_prompt(
-            char_obj, real_role, known_werewolves=werewolves if real_role == "werewolf" else None,
-        )
+        system_prompt = self._system_prompt(char_obj.name)
 
         report_prompt = self.gm.prompt_builder.build_morning_report_prompt(
             character_name=speaker_name,
@@ -267,8 +331,7 @@ class NPCController:
             character=char_obj,
         )
 
-        report_data = self.gm.llm.generate_json(system_prompt, report_prompt, use_narrative_cfg=True)
-        dialogue = report_data.get("dialogue") if report_data else None
+        dialogue = self.gm.llm.generate_text(system_prompt, report_prompt).strip().strip('"') or None
         return dialogue
 
     def _get_new_findings(self, name: str, role: str) -> list[str]:
@@ -281,50 +344,148 @@ class NPCController:
         return []
 
     # ================================================================
-    # VOTING — StatEngine only, no LLM
+    # GROUP DECISIONS — votes and night actions, one LLM call per side
     # ================================================================
+    # Villagers and wolves are decided in separate calls so the model never
+    # knows who the wolves are while reasoning for the village. Anything the
+    # model gets wrong or leaves out falls back to the stat engine.
 
-    def generate_vote(self, voter_name: str) -> dict:
-        return self.gm.stat_engine.compute_vote(voter_name)
+    ROLE_LABELS = {"villager": "a villager", "werewolf": "a werewolf",
+                   "guardian_angel": "the Guardian Angel", "coroner": "the Coroner"}
 
-    # ================================================================
-    # NIGHT ACTIONS — StatEngine only, no LLM
-    # ================================================================
+    def _brief(self, name: str) -> str:
+        state = self.gm.state
+        role = state.roles.get(name, "villager")
+        knowledge = []
+        role_label = self.ROLE_LABELS.get(role, role)
+        if role == "werewolf":
+            pack = [w for w, r in state.roles.items() if r == "werewolf" and w != name and w in state.alive_characters]
+            role_label += f", packmate of {', '.join(pack)}" if pack else ", the last of the pack"
+        elif role == "guardian_angel" and state.ga_protection_history:
+            knowledge.append("protected so far: " + "; ".join(state.ga_protection_history))
+        elif role == "coroner" and state.coroner_knowledge:
+            knowledge.append("coroner findings: " + "; ".join(state.coroner_knowledge))
+        book = state.logbooks.get(name)
+        logbook = book.render(alive=state.alive_characters, max_entries=3) if book else ""
+        return self.gm.prompt_builder.build_character_brief(
+            self.gm.characters[name], role_label, knowledge, logbook)
 
-    def generate_kill_preference(self, werewolf_name: str, valid_targets: list[str]) -> dict:
-        return self.gm.stat_engine.compute_kill_preference(werewolf_name, valid_targets)
+    def _shared_kwargs(self) -> dict:
+        return {
+            "game_context": self.gm.get_game_context(),
+            "roster_text": self.gm.get_roster_text(),
+            "claims_text": self.gm.get_claims_text(),
+            "transcript": self.gm.get_day_transcript(),
+        }
 
-    def generate_wolf_whisper(self, werewolf_name: str, valid_targets: list[str]) -> dict:
-        """Generates an in-character whisper from a fellow werewolf about who to kill."""
-        char_obj = self.gm.characters[werewolf_name]
-        werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
+    def _group_call(self, prompt: str, varied: bool = False) -> dict:
+        """Low temperature by default; `varied` uses the narrative sampling so a retry can differ."""
+        system = self.gm.prompt_builder.build_group_decision_system()
+        return self.gm.llm.generate_json(system, prompt, use_narrative_cfg=varied) or {}
 
-        # Step 1: StatEngine picks the target
-        pref = self.gm.stat_engine.compute_kill_preference(werewolf_name, valid_targets)
-        target = pref["target"]
-        engine_reasoning = pref["thought_process"]
+    def _note_fallback(self, what: str, data: dict):
+        """Under show_logic, says when the engine had to stand in for the LLM, with the raw answer."""
+        if self.gm.debug.get("show_logic"):
+            raw = str(data)[:300]
+            self.gm.io.show_system(f"{what} fell back to the stat engine. LLM answer: {raw}", style="muted")
 
-        # Step 2: LLM generates in-character whisper
-        system_prompt = self.gm.prompt_builder.build_system_prompt(
-            char_obj, "werewolf", known_werewolves=werewolves,
+    @staticmethod
+    def _vote_entries(data: dict) -> list[dict]:
+        """Accepts {"votes": [{voter, vote, reasoning}]} and the {"votes": {voter: {...}}} variant."""
+        votes = data.get("votes", [])
+        if isinstance(votes, dict):
+            votes = [{"voter": k, **v} if isinstance(v, dict) else {"voter": k, "vote": v} for k, v in votes.items()]
+        return [v for v in votes if isinstance(v, dict)] if isinstance(votes, list) else []
+
+    def decide_votes(self, voters: list[str]) -> dict:
+        """Returns {voter: {"target", "thought_process"}} for every NPC voter."""
+        state = self.gm.state
+        wolves = [v for v in voters if state.roles.get(v) == "werewolf"]
+        village = [v for v in voters if v not in wolves]
+        pack = [n for n in state.alive_characters if state.roles.get(n) == "werewolf"]
+
+        results = {}
+        for group, group_pack in ((village, None), (wolves, pack)):
+            if group:
+                results.update(self._decide_group_votes(group, group_pack))
+        for voter in voters:
+            if voter not in results:
+                results[voter] = self.gm.stat_engine.compute_vote(voter)
+        return results
+
+    def _decide_group_votes(self, group: list[str], pack: list[str] = None) -> dict:
+        """One call for a side. Illegal votes (self, or a packmate for wolves) get one retry that
+        names the mistake; whatever is still missing is left for the engine."""
+        state = self.gm.state
+        candidates = [n for n in state.alive_characters if n not in (pack or [])]
+        briefs = [self._brief(v) for v in group]
+        if pack:
+            briefs = [b + f"May vote for: {', '.join(candidates)}, None (never {', '.join(p for p in pack if p != v)})\n"
+                      for b, v in zip(briefs, group)]
+        prompt = self.gm.prompt_builder.build_vote_prompt(
+            briefs=briefs, candidates=candidates, pack=pack, **self._shared_kwargs(),
         )
-        whisper_prompt = self.gm.prompt_builder.build_wolf_whisper_prompt(
-            speaker_name=werewolf_name,
-            occupation=char_obj.occupation,
-            target=target,
-            engine_reasoning=engine_reasoning,
-            valid_targets=valid_targets,
-            chat_history=self.gm.state.chat_history,
-            character=char_obj,
+
+        results, data = {}, {}
+        for attempt in range(2):
+            data = self._group_call(prompt, varied=attempt > 0)
+            mistakes = []
+            for entry in self._vote_entries(data):
+                voter = self.gm.sanitize_target(str(entry.get("voter", "")))
+                if voter not in group or voter in results:
+                    continue
+                target = self.gm.sanitize_target(str(entry.get("vote", "None")))
+                if target == voter or (pack and target in pack):
+                    who = "themselves" if target == voter else f"{target}, their own packmate"
+                    mistakes.append(f"{voter} voted for {who}")
+                    continue
+                results[voter] = {"target": target, "thought_process": str(entry.get("reasoning", "")).strip()}
+            if all(v in results for v in group) or not mistakes:
+                break
+            prompt += (f"\n\nYour last answer was invalid: {'; '.join(mistakes)}. "
+                       f"Choose again for every voter, only from the valid votes.")
+
+        missing = [v for v in group if v not in results]
+        if missing:
+            self._note_fallback(f"Votes of {', '.join(missing)}", data)
+        return results
+
+    def decide_kill(self, wolves: list[str], candidates: list[str]) -> dict:
+        """The NPC wolves pick a victim together. Returns {"target", "reasoning", "whispers": {wolf: text}}.
+        With the Player in the pack the whispers are advice and the Player makes the call."""
+        npc_wolves = [w for w in wolves if w != "Player"]
+        if not npc_wolves or not candidates:
+            return {"target": random.choice(candidates) if candidates else "None", "reasoning": "", "whispers": {}}
+
+        prompt = self.gm.prompt_builder.build_kill_prompt(
+            briefs=[self._brief(w) for w in npc_wolves], candidates=candidates, **self._shared_kwargs(),
         )
+        data = self._group_call(prompt)
+        whispers = {}
+        for entry in data.get("whispers", []) or []:
+            if isinstance(entry, dict):
+                wolf = self.gm.sanitize_target(str(entry.get("wolf", "")))
+                if wolf in npc_wolves and entry.get("whisper"):
+                    whispers[wolf] = str(entry["whisper"]).strip().strip('"')
 
-        whisper_data = self.gm.llm.generate_json(system_prompt, whisper_prompt, use_narrative_cfg=True)
-        dialogue = whisper_data.get("dialogue", engine_reasoning) if whisper_data else engine_reasoning
+        target = self.gm.sanitize_target(str(data.get("target", "None")))
+        if target not in candidates:
+            self._note_fallback("The pack's kill", data)
+            target = self.gm.stat_engine.compute_kill_preference(npc_wolves[0], candidates)["target"]
+        return {"target": target, "reasoning": str(data.get("reasoning", "")).strip(), "whispers": whispers}
 
-        return {"target": target, "thought_process": engine_reasoning, "dialogue": dialogue}
-
-    def generate_protect_preference(self, ga_name: str, valid_targets: list[str]) -> dict:
-        return self.gm.stat_engine.compute_protect_preference(ga_name, valid_targets)
+    def decide_protection(self, ga_name: str, candidates: list[str]) -> dict:
+        """The NPC Guardian Angel picks who to protect. Returns {"target", "thought_process"}."""
+        excluded = [n for n in self.gm.state.alive_characters if n not in candidates and n != ga_name]
+        prompt = self.gm.prompt_builder.build_protect_prompt(
+            brief=self._brief(ga_name), candidates=candidates, excluded=excluded, **self._shared_kwargs(),
+        )
+        data = self._group_call(prompt)
+        target = self.gm.sanitize_target(str(data.get("target", "None")))
+        if target not in candidates:
+            self._note_fallback(f"{ga_name}'s protection", data)
+            return self.gm.stat_engine.compute_protect_preference(ga_name, candidates)
+        return {"target": target, "thought_process": str(data.get("reasoning", "")).strip()}
 
     # ================================================================
     # FINAL WORDS — kept as LLM call (emotional impact)
@@ -333,13 +494,7 @@ class NPCController:
     def generate_final_words(self, character_name: str) -> str:
         char_obj = self.gm.characters[character_name]
         role = self.gm.state.roles.get(character_name, "villager")
-        werewolves = [name for name, r in self.gm.state.roles.items() if r == "werewolf"]
-        coroner_knowledge = self.gm.state.coroner_knowledge if role == "coroner" else None
-        ga_history = self.gm.state.ga_protection_history if role == "guardian_angel" else None
-        system_prompt = self.gm.prompt_builder.build_system_prompt(
-            char_obj, role, known_werewolves=werewolves,
-            coroner_knowledge=coroner_knowledge, ga_protection_history=ga_history,
-        )
+        system_prompt = self._system_prompt(char_obj.name)
 
         user_prompt = self.gm.prompt_builder.build_final_words_prompt(
             character_name=character_name,

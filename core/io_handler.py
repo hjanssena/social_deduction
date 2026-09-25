@@ -66,10 +66,10 @@ class IOHandler:
 
     def show_engine_debug(self, speaker: str, intent: str, target: str,
                           emotion: str, reasoning: str, intensity: str = None):
-        """Debug output from the stat engine."""
+        """Debug output: the decision behind a line (intent, target, emotion, private thought)."""
         extra = f", {intensity}" if intensity else ""
         self.display(
-            f"\n\033[90m[Engine ({speaker})]: [{intent}] -> {target} "
+            f"\n\033[90m[Logic ({speaker})]: [{intent}] -> {target} "
             f"({emotion}{extra}) | {reasoning}\033[0m"
         )
 

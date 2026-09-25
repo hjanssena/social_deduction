@@ -36,9 +36,12 @@ class LLMBase(ABC):
             return {}
         response_text = self._sanitize_json_text(response_text)
 
-        # Try parsing directly first, then extract if needed
+        # Try parsing directly first, then extract if needed. Only JSON objects count:
+        # a bare JSON string or number would break every caller's .get().
         try:
-            return json.loads(response_text)
+            parsed = json.loads(response_text)
+            if isinstance(parsed, dict):
+                return parsed
         except json.JSONDecodeError:
             pass
 

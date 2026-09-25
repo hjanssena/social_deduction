@@ -43,7 +43,7 @@ class PlayerController:
 
         return parsed_data
 
-    def _apply_trust_and_log(self, intent: str, target: str, emotion: str, summary: str):
+    def _apply_trust_and_log(self, intent: str, target: str, emotion: str, summary: str, dialogue: str = ""):
         """Shared trust + logical_history update for both assertions and reactions."""
         TrustManager.apply_interaction(
             game_state=self.gm.state,
@@ -55,6 +55,7 @@ class PlayerController:
         self.gm.state.logical_history.append(
             f"Player [{intent}] -> {target} (Emotion: {emotion}). Reason: {summary}"
         )
+        self.gm.record_action("Player", intent, target, dialogue=dialogue)
 
     # ------------------------------------------------------------------
     # Assertion processing
@@ -82,7 +83,7 @@ class PlayerController:
         emotion = parsed_data.get("emotion", "neutral")
         summary = parsed_data.get("summary", "Spoke to the room.")
 
-        self._apply_trust_and_log(intent, target, emotion, summary)
+        self._apply_trust_and_log(intent, target, emotion, summary, dialogue=player_text)
 
         display_target = target if target != "None" else "Room"
         self.gm.state.chat_history.append(f"[Player -> {display_target}]: {player_text}")
@@ -118,7 +119,7 @@ class PlayerController:
         emotion = parsed_data.get("emotion", "neutral")
         summary = parsed_data.get("summary", "Reacted.")
 
-        self._apply_trust_and_log(intent, target, emotion, summary)
+        self._apply_trust_and_log(intent, target, emotion, summary, dialogue=player_text)
 
         return parsed_data
 

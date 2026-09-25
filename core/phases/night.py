@@ -1,6 +1,3 @@
-import random
-from collections import Counter
-
 from core.game_state import GamePhase, WIN_MESSAGES
 from core.trust_manager import TrustManager
 
@@ -68,15 +65,10 @@ class NightPhase:
 
         io.show_system("The village sleeps... but something evil stalks the night.", style="muted")
 
-        votes = []
-        for npc in alive_werewolves:
-            pref = gm.npc_controller.generate_kill_preference(npc, alive_villagers)
-            if pref["target"] in alive_villagers:
-                votes.append(pref["target"])
-
-        if votes:
-            return Counter(votes).most_common(1)[0][0]
-        return random.choice(alive_villagers)
+        decision = gm.npc_controller.decide_kill(alive_werewolves, alive_villagers)
+        if gm.debug.get("show_logic"):
+            io.show_engine_debug("Pack", "kill", decision["target"], "", decision["reasoning"])
+        return decision["target"]
 
     def _player_werewolf_kill(self, alive_werewolves, alive_villagers) -> str:
         """Handles kill selection when the player is a werewolf."""
@@ -86,9 +78,10 @@ class NightPhase:
         npc_wolves = [w for w in alive_werewolves if w != "Player"]
         if npc_wolves:
             io.show_system("Your fellow werewolves whisper their desires in the dark...", style="muted")
+            whispers = gm.npc_controller.decide_kill(alive_werewolves, alive_villagers)["whispers"]
             for npc in npc_wolves:
-                whisper = gm.npc_controller.generate_wolf_whisper(npc, alive_villagers)
-                io.show_dialogue(npc, "Pack", whisper["dialogue"], intent="whisper")
+                if npc in whispers:
+                    io.show_dialogue(npc, "Pack", whispers[npc], intent="whisper")
         else:
             io.show_system("You are the lone werewolf. The choice is yours entirely.", style="error")
 
@@ -168,12 +161,9 @@ class NightPhase:
         return selected
 
     def _npc_ga_protect(self, ga_name: str, valid_targets: list[str]) -> str:
-        """NPC Guardian Angel chooses a protection target via stat engine."""
+        """NPC Guardian Angel chooses a protection target (LLM, engine fallback)."""
         gm = self.gm
-        pref = gm.npc_controller.generate_protect_preference(ga_name, valid_targets)
-        target = pref.get("target", None)
-
-        if target and target in valid_targets:
-            return target
-
-        return random.choice(valid_targets) if valid_targets else None
+        decision = gm.npc_controller.decide_protection(ga_name, valid_targets)
+        if gm.debug.get("show_logic"):
+            gm.io.show_engine_debug(ga_name, "protect", decision["target"], "", decision["thought_process"])
+        return decision["target"]

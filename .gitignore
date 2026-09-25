@@ -34,3 +34,4 @@ cudart64_12.dll
 
 # Local environment overrides
 .env
+logs/
