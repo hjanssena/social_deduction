@@ -6,6 +6,7 @@ from core.controllers.npc_controller import NPCController
 from core.controllers.player_controller import PlayerController
 from core.game_state import GameState, GamePhase
 from core.stat_engine import StatEngine
+from core.colors import assign_colors
 from core.io_handler import IOHandler
 from core.phases import ProloguePhase, DiscussionPhase, VotingPhase, NightPhase
 
@@ -20,6 +21,8 @@ class GameMaster:
         self.log_dir = os.path.join("logs", datetime.now().strftime("%Y%m%d-%H%M%S"))
         self.io = io or IOHandler()
         self.characters = {c.name: c for c in characters}
+        if config.get("display", {}).get("character_colors", True):
+            self.io.set_colors(assign_colors(characters))
         self.state = GameState(characters, config)
 
         # Sub-systems

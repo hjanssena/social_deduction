@@ -139,5 +139,9 @@
             "top_k": 40,
             "repeat_penalty": 1.05
         }
+    },
+    "display": {
+        "_docs": "Terminal display. character_colors: paint every character's name and lines in their own color (set a character's 'color' in characters_data.py to pick it). The NO_COLOR environment variable turns all colors off.",
+        "character_colors": true
     }
 }

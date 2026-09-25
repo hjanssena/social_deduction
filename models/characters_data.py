@@ -3,6 +3,7 @@
 RAW_CHARACTER_DATA = [
     {
         "name": "Elias",
+        "color": 215,
         "occupation": "Village Blacksmith",
         "bio": "Physically imposing, deeply distrustful of outsiders. Has worked the forge his entire life.",
         "archetype": "Paranoid, aggressive, and blunt.",
@@ -67,6 +68,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Silas",
+        "color": 75,
         "occupation": "Scholar / Record Keeper",
         "bio": "Considers himself the only educated person in the village. Views the crisis as a puzzle to be solved.",
         "archetype": "Arrogant, cold, and highly analytical.",
@@ -131,6 +133,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Victor",
+        "color": 141,
         "occupation": "Village Mayor",
         "bio": "Inherited his position. Cares more about his public image than solving the crisis. Loud but not smart.",
         "archetype": "Pompous, defensive, and authoritative.",
@@ -190,6 +193,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Elara",
+        "color": 211,
         "occupation": "Village Baker",
         "bio": "The heart of the village. Kind, naive, hates conflict. Easily swayed by a sad story.",
         "archetype": "Sweet, anxious, and easily manipulated.",
@@ -254,6 +258,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Garrick",
+        "color": 114,
         "occupation": "Tavern Keeper",
         "bio": "Hears every secret in town. Charming and uses humor to defuse tension, but always calculating the winning side.",
         "archetype": "Charismatic, friendly, and subtly manipulative.",
@@ -318,6 +323,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Bram",
+        "color": 180,
         "occupation": "Village Elder",
         "bio": "The oldest living resident of the village. He remembers the last time the wolves came, decades ago. He commands deep respect through his age and memory, often subtly undermining Victor's 'modern' authority. He views everyone else as impulsive children.",
         "archetype": "Stubborn, patronizing, and anchored in the past.",
@@ -382,6 +388,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Maeve",
+        "color": 67,
         "occupation": "Gravedigger",
         "bio": "More comfortable around the dead than the living. Exhausted, fearless, no social grace. Only speaks with proof.",
         "archetype": "Morbid, silent, and ruthlessly logical.",

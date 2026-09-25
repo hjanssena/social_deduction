@@ -10,6 +10,7 @@ class Character:
         self.is_alive = True
         self.prologue_reactions = profile_data.get("prologue_reactions", [])
         self.speech_examples = profile_data.get("speech_examples", {})
+        self.color = profile_data.get("color")  # 256-color ANSI code; see core/colors.py
         
         # Parse mechanical stats, defaulting to 5 if missing
         stats = profile_data.get("stats", {})
