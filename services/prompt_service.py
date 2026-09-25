@@ -247,88 +247,83 @@ class PromptService:
             "and who accused or defended whom."
         )
 
+    TURN_ACTIONS = (
+        "- accuse <name>: you think they are a werewolf. Needs a concrete reason from what happened "
+        "(something they said, did or dodged). A grudge or a bad feeling alone is not enough.\n"
+        "- question <name>: press someone to explain themselves.\n"
+        "- defend_other <name>: stand up for someone who is being accused.\n"
+        "- agree <name> / disagree <name>: back or challenge a point someone made.\n"
+        "- defend_self: answer accusations made against you.\n"
+        "- deflect: steer attention away from yourself.\n"
+        "- neutral: share a worry, observation or proposal.\n"
+    )
+
     @staticmethod
-    def build_assertion_prompt(character, day: int, game_context: str, roster_text: str,
-                               claims_text: str, record_text: str, chat_history: list[str],
-                               stakes_text: str = "", history_window: int = 8) -> str:
-        """The character's turn to speak: they choose what to do, to whom, and say it."""
-        prompt = PromptService._context_block(
-            game_context, roster_text, claims_text, record_text, chat_history, history_window)
+    def build_turn_prompt(character, role: str, day: int, game_context: str, roster_text: str,
+                          claims_text: str, earlier_today: list[str], thread_text: str,
+                          stakes_text: str = "", owed_by: str = "", owed_line: str = "",
+                          last_topic: str = "", own_lines: list[str] = ()) -> str:
+        """One line in the day's discussion. role: "open" raises a new topic, "answer" answers the
+        question or accusation aimed at the character, "join" adds to the current exchange or passes."""
+        prompt = f"SITUATION: {game_context}\n\n"
+        prompt += f"WHO IS HERE:\n{roster_text}\n\n"
+        if claims_text:
+            prompt += f"ROLE CLAIMS:\n{claims_text}\n\n"
+        prompt += "EARLIER TODAY:\n" + ("\n".join(f"- {e}" for e in earlier_today)
+                                        if earlier_today else "(nothing yet, the discussion is just starting)")
+        prompt += "\n\n"
+        if own_lines:
+            prompt += ("WHAT YOU SAID EARLIER TODAY (stay consistent with it, or say why you changed your mind):\n"
+                       + "\n".join(f'- "{line}"' for line in own_lines) + "\n\n")
+        if role != "open":
+            prompt += f"THIS CONVERSATION (what is being discussed right now, in order):\n{thread_text}\n\n"
         if stakes_text:
             prompt += f"WHAT CONCERNS YOU:\n{stakes_text}\n\n"
 
-        prompt += f"IT IS YOUR TURN TO SPEAK. Decide what {character.name} would do right now.\n"
-        prompt += (
-            "Choose one action:\n"
-            "- accuse <name>: you think they are a werewolf. Needs a concrete reason from what happened "
-            "(something they said, did or dodged). A grudge or a bad feeling alone is not enough.\n"
-            "- question <name>: press someone to explain themselves.\n"
-            "- defend_other <name>: stand up for someone who is being accused.\n"
-            "- agree <name> / disagree <name>: back or challenge a point someone made.\n"
-            "- defend_self: answer accusations made against you.\n"
-            "- deflect: steer attention away from yourself.\n"
-            "- neutral: share a worry, observation or proposal with the room.\n\n"
-        )
+        name = character.name
+        if role == "open":
+            prompt += (
+                f"THE FLOOR IS YOURS: {name} raises a new topic with the town.\n"
+                + (f"The town has just finished with this: {last_topic} Do not pick it up again.\n" if last_topic else "")
+                + "Bring up something that is NOT already on the EARLIER TODAY list: a trace from the crime scene, "
+                "a role claim, how someone voted, something someone said or dodged, someone who has kept quiet. "
+                "Go back to a topic from the list only if you have something genuinely new to add to it.\n"
+                "Choose one action:\n" + PromptService.TURN_ACTIONS + "\n"
+            )
+            intents, extra = NPC_INTENTS, '  "topic": "<the topic you raise, in a few words, e.g. the wax at the mill gate>",\n'
+            dialogue = "1-2 sentences you say aloud, in your voice"
+        elif role == "answer":
+            prompt += (
+                f"{owed_by} just said to you: \"{owed_line}\"\n"
+                f"It is {name}'s turn to answer it. Explain, deny, or turn it around, the way {name} would. "
+                "Answer what was actually asked. Ask at most one question back.\n"
+                "Choose one action:\n" + PromptService.TURN_ACTIONS + "\n"
+            )
+            intents, extra = NPC_INTENTS, ""
+            dialogue = "1-2 sentences you say aloud, in your voice"
+        else:
+            prompt += (
+                f"{name} may join this conversation. Add something new to THIS exchange: back someone, "
+                "challenge them, or ask the one thing nobody has asked yet. Stay on this topic; don't open a "
+                "new one. If you have nothing new to add, or it doesn't concern you, pass.\n"
+                "Choose one action:\n" + PromptService.TURN_ACTIONS + "- pass: say nothing this time.\n\n"
+            )
+            intents, extra = NPC_INTENTS + "|pass", ""
+            dialogue = "one or two short sentences you say aloud, in your voice; empty if you pass"
+
         prompt += (
             "How to decide:\n"
             f"- {PromptService._day_guidance(day)}\n"
-            "- Your logbook colors your judgment: you are slow to suspect friends and quick to stand up "
-            "for them; you distrust enemies, but you still need a reason to accuse them.\n"
-            "- Respond to what was actually said. Add something new instead of repeating a point already "
-            "made, and never invent events that did not happen.\n"
+            "- Your logbook colors your judgment: you are slow to suspect friends and quick to stand up for "
+            "them; you distrust enemies, but you still need a reason to accuse them.\n"
+            "- Don't repeat what someone already said, in their words or yours.\n"
             f"- {FACTS_ONLY}\n"
             "- What someone told you in private is yours to use: repeat it if it helps, or keep it to yourself.\n\n"
         )
-        prompt += DECISION_FORMAT.format(
-            intents=NPC_INTENTS,
-            dialogue="1-2 sentences you say aloud, in your voice. Name the person you address.",
-        )
-        return prompt
-
-    @staticmethod
-    def build_reaction_prompt(character, day: int, game_context: str, roster_text: str,
-                              claims_text: str, record_text: str, chat_history: list[str],
-                              assertion_speaker: str, assertion_target: str, assertion_dialogue: str,
-                              reaction_chain: list[dict], stakes_text: str = "",
-                              history_window: int = 8) -> str:
-        """The character hears a statement and decides whether and how to react."""
-        prompt = PromptService._context_block(
-            game_context, roster_text, claims_text, record_text, chat_history, history_window)
-
-        addressed = f" to {assertion_target}" if assertion_target not in ("None", "", None) else ""
-        prompt += "JUST NOW:\n"
-        prompt += f'{assertion_speaker} said{addressed}: "{assertion_dialogue}"\n'
-        for r in (reaction_chain or [])[-3:]:
-            prompt += f'{r["speaker"]} replied: "{r["dialogue"]}"\n'
-        prompt += "\n"
-        if stakes_text:
-            prompt += f"WHAT CONCERNS YOU:\n{stakes_text}\n\n"
-
-        prompt += (
-            f"Decide whether {character.name} reacts. Speak only if you have a real stake or something "
-            "worth adding; otherwise stay silent.\n"
-            "Choose one action:\n"
-            "- defend_self: you were just accused or questioned.\n"
-            "- defend_other <name>: stand up for the person being targeted.\n"
-            "- agree <name> / disagree <name>: back or challenge the speaker or someone who replied.\n"
-            "- question <name>: press someone for an answer.\n"
-            "- accuse <name>: only with a concrete reason from what happened.\n"
-            "- deflect / neutral: steer away, or add a general remark.\n"
-            "- silent: say nothing this time.\n\n"
-        )
-        prompt += (
-            "How to decide:\n"
-            f"- {PromptService._day_guidance(day)}\n"
-            "- Your logbook colors your judgment: stand up for friends, and be quick to doubt enemies, "
-            "but a grudge alone is not proof.\n"
-            "- Do not repeat what was already said.\n"
-            f"- {FACTS_ONLY}\n\n"
-        )
-        prompt += DECISION_FORMAT.format(
-            intents=NPC_REACTION_INTENTS,
-            dialogue="one short sentence you say aloud, in your voice; empty if silent",
-        )
-        return prompt
+        fmt = DECISION_FORMAT.format(intents=intents, dialogue=dialogue)
+        if extra:
+            fmt = fmt.replace('  "thought":', extra + '  "thought":', 1)
+        return prompt + fmt
 
     @staticmethod
     def _extract_names(roster_text: str) -> list[str]:

@@ -6,13 +6,16 @@
         "coroner_count": 1
     },
     "discussion": {
-        "_docs": "Controls the discussion phase loop. decay_factor: multiplier applied to a speaker's bid weight each time they speak (lower = less likely to speak again soon). max_assertions_per_day: total assertion slots per day. chat_history_window: how many recent chat lines the LLM prompts receive. max_reactions_per_assertion: at most this many NPCs are asked to react to each assertion (each may choose to stay silent); the accused always gets a chance. player_min_actions: below this many actions in a day, the town notices the Player's silence (it goes on the public record). player_max_actions: above this, the town notices the Player's constant interruptions.",
+        "_docs": "Controls the discussion phase: one thread (topic) at a time, see docs/discussion-threads.md. turns_per_day: spoken lines per day across all threads (passes are free). max_turns_per_thread: a thread closes after this many lines. max_turns_per_speaker: lines one character may speak in a thread, answers excepted. bystander_chance: when nobody has a stake in the exchange, the chance that an uninvolved villager joins in anyway. decay_factor: multiplier on a character's chance to open a topic each time they open one. chat_history_window: how many recent chat lines other prompts (aftermath) receive. max_aftermath_reactions: at most this many characters react to the verdict. player_min_actions: below this many actions in a day, the town notices the Player's silence (it goes on the public record). player_max_actions: above this, the town notices the Player's constant interruptions.",
+        "turns_per_day": 24,
+        "max_turns_per_thread": 6,
+        "max_turns_per_speaker": 2,
+        "bystander_chance": 0.3,
         "decay_factor": 0.2,
-        "max_assertions_per_day": 6,
         "chat_history_window": 8,
+        "max_aftermath_reactions": 3,
         "player_min_actions": 2,
-        "player_max_actions": 7,
-        "max_reactions_per_assertion": 3
+        "player_max_actions": 7
     },
     "engine": {
         "_docs": "All parameters for the deterministic StatEngine. Organized by subsystem.",
@@ -105,9 +108,10 @@
         "memory_sentences": 6
     },
     "debug": {
-        "_docs": "Debug display toggles. show_logic: print each character's decision (intent, target, emotion, private thought) in gray. dump_logbooks: write every logbook to logs/<game>/<name>.md after each phase.",
+        "_docs": "Debug display toggles. show_logic: print each character's decision (intent, target, emotion, private thought) in gray. dump_logbooks: write every logbook to logs/<game>/<name>.md after each phase. show_threads: mark where each discussion thread (topic) opens and how it closed.",
         "show_logic": false,
-        "dump_logbooks": false
+        "dump_logbooks": false,
+        "show_threads": false
     },
     "llm": {
         "_docs": "LLM backend configuration. backend: 'llamacpp' for local GGUF, 'gpt4all' for local GGUF via GPT4All, 'ollama' for Ollama API, or 'openai' for any OpenAI-compatible API. model_path: path to GGUF file (llamacpp/gpt4all). chat_format: tokenizer chat template (llamacpp only). model: model name for Ollama. ollama_url: Ollama API endpoint. openai: settings for the 'openai' backend.",

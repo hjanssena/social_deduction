@@ -5,7 +5,7 @@ class DialoguePrefetcher:
     """Generates NPC dialogue in the background while the player reads the current one.
 
     Usage:
-        prefetcher.submit(npc_controller.generate_assertion, speaker, assertion_idx)
+        prefetcher.submit(npc_controller.take_turn, name, role, thread, earlier_today)
         # ... player reads current dialogue ...
         result = prefetcher.get()  # blocks until ready, or returns None
     """
