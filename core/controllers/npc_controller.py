@@ -1,6 +1,9 @@
 import random
 from difflib import SequenceMatcher
 
+from core.game_state import PREMISE
+from models.clues import plan_scene
+
 from services.prompt_service import NPC_INTENTS, NPC_REACTION_INTENTS, VALID_EMOTIONS
 
 
@@ -320,9 +323,54 @@ class NPCController:
     # ================================================================
 
     def build_crime_scene(self, victim: str) -> str:
-        """What the village finds in the morning. (Placeholder until the crime scene milestone.)"""
+        """What the village finds in the morning. The engine fixes the place and the traces (a vague true
+        clue sometimes, a red herring usually), the LLM writes the scene around them. The wolves learn
+        which trace points their way; the Coroner learns which one was planted."""
+        state = self.gm.state
+        cfg = self.gm.crime_scene_config
+        location, clues = plan_scene(state.day, victim, state.killer_last_night, state.roles,
+                                     state.alive_characters, self.gm.characters, cfg)
+        for clue in clues:
+            state.clues.add(clue)
+
         occupation = self.gm.characters[victim].occupation.lower() if victim in self.gm.characters else "traveler"
-        return f"{victim}, the {occupation}, was found dead this morning, torn apart by werewolves."
+        prompt = self.gm.prompt_builder.build_crime_scene_prompt(
+            victim, f"the {occupation}", location, [c.tag for c in clues], PREMISE)
+        scene = self.gm.llm.generate_text(
+            "You are the narrator of a dark village mystery. You write vivid, grounded prose.", prompt).strip()
+        if not scene:
+            traces = f" Beside the body: traces of {' and '.join(c.tag for c in clues)}." if clues else ""
+            scene = f"{victim}, the {occupation}, was found dead at {location}, torn apart.{traces}"
+
+        self._share_scene_secrets(victim, clues)
+        return scene
+
+    def _share_scene_secrets(self, victim: str, clues: list):
+        """Private knowledge about the scene: the wolves know which trace points at them, the Coroner
+        learns which trace was planted (evidence, never the killer)."""
+        state = self.gm.state
+        true_clue = next((c for c in clues if c.kind == "true"), None)
+        herring = next((c for c in clues if c.kind == "herring"), None)
+        wolves = [n for n, r in state.roles.items() if r == "werewolf" and n in state.alive_characters]
+        if true_clue:
+            others = [f for f in true_clue.fits if f not in wolves]
+            note = (f"The {true_clue.tag} found by {victim}'s body could lead back to the pack. "
+                    f"{', '.join(others)} could have left it too, which is useful.")
+            for wolf in wolves:
+                if wolf in state.logbooks:
+                    state.logbooks[wolf].add_entry(state.day, "Morning", note)
+            if "Player" in wolves:
+                self.gm.io.show_system(note, style="special")
+
+        coroner = next((n for n in state.alive_characters if state.roles.get(n) == "coroner"), None)
+        if coroner and herring:
+            finding = (f"Day {state.day}: examining {victim}'s body, I found that the {herring.tag} "
+                       f"was planted after death")
+            state.coroner_knowledge.append(finding)
+            if coroner in state.logbooks:
+                state.logbooks[coroner].add_entry(state.day, "Morning", finding + ". Someone wants us looking the wrong way.")
+            if coroner == "Player":
+                self.gm.io.show_system(f"CORONER INSIGHT: {finding}.", style="special")
 
     def react_to_verdict(self, name: str, verdict_text: str, chain: list) -> dict | None:
         """A character's reaction once the vote is over. None when they stay silent."""
@@ -538,24 +586,30 @@ class NPCController:
         With the Player in the pack the whispers are advice and the Player makes the call."""
         npc_wolves = [w for w in wolves if w != "Player"]
         if not npc_wolves or not candidates:
-            return {"target": random.choice(candidates) if candidates else "None", "reasoning": "", "whispers": {}}
+            return {"target": random.choice(candidates) if candidates else "None", "reasoning": "",
+                    "whispers": {}, "killer": wolves[0] if wolves else None}
 
         prompt = self.gm.prompt_builder.build_kill_prompt(
             briefs=[self._brief(w) for w in npc_wolves], candidates=candidates, **self._shared_kwargs(),
         )
         data = self._group_call(prompt)
-        whispers = {}
+        whispers, preferences = {}, {}
         for entry in data.get("whispers", []) or []:
             if isinstance(entry, dict):
                 wolf = self.gm.sanitize_target(str(entry.get("wolf", "")))
                 if wolf in npc_wolves and entry.get("whisper"):
                     whispers[wolf] = str(entry["whisper"]).strip().strip('"')
+                if wolf in npc_wolves:
+                    preferences[wolf] = self.gm.sanitize_target(str(entry.get("preference", "")))
 
         target = self.gm.sanitize_target(str(data.get("target", "None")))
         if target not in candidates:
             self._note_fallback("The pack's kill", data)
             target = self.gm.stat_engine.compute_kill_preference(npc_wolves[0], candidates)["target"]
-        return {"target": target, "reasoning": str(data.get("reasoning", "")).strip(), "whispers": whispers}
+        # The wolf whose preference carried the night did the deed (and may have left traces)
+        killer = next((w for w, p in preferences.items() if p == target), random.choice(npc_wolves))
+        return {"target": target, "reasoning": str(data.get("reasoning", "")).strip(), "whispers": whispers,
+                "killer": killer}
 
     def decide_protection(self, ga_name: str, candidates: list[str]) -> dict:
         """The NPC Guardian Angel picks who to protect. Returns {"target", "thought_process"}."""

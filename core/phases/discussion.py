@@ -354,12 +354,12 @@ class DiscussionPhase:
                 })
                 reactions_made += 1
             else:
-                penalty = -abs(gm.config.get("silence_under_fire_penalty", 8))
                 io.show_system(
                     "You refused to defend yourself against a direct claim. The town notices your guilt...",
                     style="error"
                 )
-                TrustManager.apply_global_trust_shift(gm.state, "Player", penalty)
+                gm.record_action("Player", "silent", speaker_name,
+                                 note=f"said nothing at all when {speaker_name} accused them")
 
         if reactions_made == 0:
             io.show_system("The room remains completely silent.", style="muted")
@@ -408,11 +408,9 @@ class DiscussionPhase:
                 io.pause()
 
     def _apply_silence_penalty(self):
-        """Penalizes the player if they were too quiet during the day."""
+        """If the player was too quiet today, the town notices: it goes on the public record."""
         gm = self.gm
         min_actions = gm.config.get("player_min_actions", 2)
         if gm.state.player_actions_today < min_actions:
-            penalty = -abs(gm.config.get("global_trust_penalty", 5))
-            io = gm.io
-            io.show_system("Your unnatural silence today has bred deep suspicion...", style="error")
-            TrustManager.apply_global_trust_shift(gm.state, "Player", penalty)
+            gm.io.show_system("Your unnatural silence today has bred deep suspicion...", style="error")
+            gm.record_action("Player", "silent", note="barely said a word all day, which everyone noticed")

@@ -1,6 +1,7 @@
 import random
 from enum import Enum
 from core.trust_manager import TrustManager
+from models.clues import ClueLedger
 from models.logbook import seed_logbooks
 
 WIN_MESSAGES = {
@@ -35,13 +36,14 @@ class GameState:
         self.ga_protected_last_night = None
         self.ga_protection_history = []  # ["Night 1: Protected Elias", ...]
         self.attacked_last_night = None  # The wolves' target last night (known to the pack)
+        self.killer_last_night = None  # The wolf whose choice it was (their traces may be at the scene)
+        self.clues = ClueLedger()
         self.saved_last_night = None  # Set when the Guardian Angel protected that target
         self.last_verdict = None  # {"day", "hanged": name or None, "text"} from the latest vote
         self.votes_by_day = {}  # {day: {voter: target or "None"}}
         self.chat_options = {}  # {day: [names]}: the villagers on offer for private chats, drawn once
         self.private_chats = []  # [{day, with, transcript}]: known only to the Player and that villager
         self.coroner_knowledge = []
-        self.opinions = {}  # {viewer: {target: "short opinion"}} — computed at end of each day
         self.contradiction_log = {}  # {name: [(day, intent, target), ...]}
         self.fake_claims = []  # [{claimant: str, claimed_role: str, day: int}]
         self.revealed_roles = {}  # {name: claimed_role} — public claims (real or fake)

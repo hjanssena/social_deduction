@@ -117,6 +117,23 @@ class PromptService:
         return prompt
 
     @staticmethod
+    def build_crime_scene_prompt(victim: str, victim_desc: str, location: str, traces: list[str],
+                                 premise: str) -> str:
+        """The morning's discovery, written around facts the engine already fixed."""
+        prompt = f"SETTING: {premise}\n\n"
+        prompt += f"This morning the villagers found the body of {victim}, {victim_desc}, at {location}. "
+        prompt += "Werewolves did this in the night.\n"
+        if traces:
+            prompt += "Traces found at the scene: " + "; ".join(traces) + ".\n"
+        prompt += (
+            "\nWrite the discovery as a narrator, in 4-6 vivid sentences: who found the body, the place, the "
+            "wounds, and every trace listed above as a physical detail someone notices. Present each trace "
+            "neutrally: never say which one matters, never name or hint at a suspect, and add no other clues.\n"
+            "Respond with ONLY the scene."
+        )
+        return prompt
+
+    @staticmethod
     def build_logbook_entry_prompt(character, moment: str, facts: list[str], names: list[str]) -> str:
         """A new in-character logbook entry, plus the (possibly changed) friends and enemies."""
         prompt = f"MOMENT: {moment}\n\n"

@@ -1,5 +1,4 @@
 from core.game_state import GamePhase
-from core.trust_manager import TrustManager
 
 ROLE_DISCOVERY = {
     "werewolf": "Tonight I learned the truth about myself: I am a werewolf. {pack}",
@@ -42,9 +41,6 @@ class NightPhase:
         gm = self.gm
         io = gm.io
         state = gm.state
-
-        # Compute opinions from the day's interactions before night resolves
-        state.opinions = TrustManager.compute_opinions(state)
 
         io.show_phase("THE NIGHT", state.day)
 
@@ -141,6 +137,7 @@ class NightPhase:
 
         io.show_system("The village sleeps... but something evil stalks the night.", style="muted")
         decision = gm.npc_controller.decide_kill(alive_werewolves, candidates)
+        gm.state.killer_last_night = decision["killer"]
         if gm.debug.get("show_logic"):
             io.show_engine_debug("Pack", "kill", decision["target"], "", decision["reasoning"])
         return decision["target"]
@@ -160,6 +157,7 @@ class NightPhase:
         else:
             io.show_system("You are the lone werewolf. The choice is yours entirely.", style="error")
 
+        gm.state.killer_last_night = "Player"
         return gm.player_controller.get_kill_target(candidates)
 
     # ------------------------------------------------------------------

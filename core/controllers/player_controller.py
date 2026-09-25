@@ -128,12 +128,11 @@ class PlayerController:
     # ------------------------------------------------------------------
 
     def _check_domination_penalty(self):
-        """Apply penalty if player is speaking too much."""
+        """If the player keeps interrupting, the town notices (once per day): it goes on the public record."""
         max_actions = self.gm.config.get("player_max_actions", 4)
-        if self.gm.state.player_actions_today > max_actions:
-            penalty = -abs(self.gm.config.get("global_trust_penalty", 5))
+        if self.gm.state.player_actions_today == max_actions + 1:
             self.io.show_system("The town grows highly suspicious of your constant interjections...", style="error")
-            TrustManager.apply_global_trust_shift(self.gm.state, "Player", penalty)
+            self.gm.record_action("Player", "neutral", note="kept interrupting everyone, which put people on edge")
 
     def get_vote(self) -> str:
         """Displays a menu for the player to cast their vote."""

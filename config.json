@@ -6,15 +6,12 @@
         "coroner_count": 1
     },
     "discussion": {
-        "_docs": "Controls the discussion phase loop. decay_factor: multiplier applied to a speaker's bid weight each time they speak (lower = less likely to speak again soon). max_assertions_per_day: total assertion slots per day. speaker_weight_decay: unused legacy key. chat_history_window: how many recent chat lines the LLM prompts receive. max_reactions_per_assertion: at most this many NPCs are asked to react to each assertion (each may choose to stay silent); the accused always gets a chance. player_min_actions: minimum player actions before silence penalty triggers. player_max_actions: maximum player actions before domination penalty triggers. global_trust_penalty: flat trust penalty applied to the player for being too quiet. silence_under_fire_penalty: trust penalty when the player refuses to defend against a direct accusation.",
+        "_docs": "Controls the discussion phase loop. decay_factor: multiplier applied to a speaker's bid weight each time they speak (lower = less likely to speak again soon). max_assertions_per_day: total assertion slots per day. chat_history_window: how many recent chat lines the LLM prompts receive. max_reactions_per_assertion: at most this many NPCs are asked to react to each assertion (each may choose to stay silent); the accused always gets a chance. player_min_actions: below this many actions in a day, the town notices the Player's silence (it goes on the public record). player_max_actions: above this, the town notices the Player's constant interruptions.",
         "decay_factor": 0.2,
         "max_assertions_per_day": 6,
-        "speaker_weight_decay": 0.25,
         "chat_history_window": 8,
         "player_min_actions": 2,
         "player_max_actions": 7,
-        "global_trust_penalty": 5,
-        "silence_under_fire_penalty": 10,
         "max_reactions_per_assertion": 3
     },
     "engine": {
@@ -149,5 +146,25 @@
     "display": {
         "_docs": "Terminal display. character_colors: paint every character's name and lines in their own color (set a character's 'color' in characters_data.py to pick it). The NO_COLOR environment variable turns all colors off.",
         "character_colors": true
+    },
+    "crime_scene": {
+        "_docs": "Crime scenes. The engine picks the facts, the LLM writes the scene. true_clue_chance: how often the scene holds a trace of the killing wolf (always one that an innocent could have left too). A red herring (a trace only innocents carry) is added whenever one exists. locations: where bodies are found. player_tags: the traces the traveler could leave (characters have their own clue_tags in characters_data.py).",
+        "true_clue_chance": 0.5,
+        "locations": [
+            "the mill race",
+            "the churchyard",
+            "the forge yard",
+            "the bakery's back door",
+            "the tavern cellar steps",
+            "the edge of the woods",
+            "the well in the square",
+            "the old bridge",
+            "the chapel steps",
+            "their own doorstep"
+        ],
+        "player_tags": [
+            "road dust",
+            "heavy boots"
+        ]
     }
 }

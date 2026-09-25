@@ -3,6 +3,7 @@
 RAW_CHARACTER_DATA = [
     {
         "name": "Mario",
+        "clue_tags": ["grease", "mushroom spores", "red thread"],
         "occupation": "Heroic Plumber",
         "bio": "The Mushroom Kingdom's greatest hero. Brave and optimistic, but a bit naive and prone to jumping (literally and figuratively) into action.",
         "archetype": "Heroic, enthusiastic, and fiercely loyal.",
@@ -67,6 +68,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Luigi",
+        "clue_tags": ["grease", "mushroom spores", "muddy boots"],
         "occupation": "Anxious Plumber",
         "bio": "Mario's taller, more easily frightened brother. Often cowers in the face of danger but steps up when it truly matters.",
         "archetype": "Nervous, observant, and reluctantly brave.",
@@ -131,6 +133,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Dante",
+        "clue_tags": ["gunpowder", "red thread", "food crumbs"],
         "occupation": "Devil Hunter",
         "bio": "A half-demon mercenary who runs the 'Devil May Cry' shop. Cocky, loves pizza, treats life-or-death situations like a game.",
         "archetype": "Cocky, nonchalant, and provocative.",
@@ -195,6 +198,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "BoJack Horseman",
+        "clue_tags": ["whiskey", "horse hair", "cigarette ash"],
         "occupation": "Washed-up Actor",
         "bio": "Former star of the 90s sitcom 'Horsin' Around'. Deeply cynical, depressed, self-destructive, and highly critical of everyone.",
         "archetype": "Cynical, defensive, and deeply insecure.",
@@ -259,6 +263,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Sol Badguy",
+        "clue_tags": ["scorch marks", "red thread", "cigarette ash"],
         "occupation": "Bounty Hunter",
         "bio": "A gruff, incredibly powerful fighter known as the Flame of Corruption. Dislikes complicated things and prefers to solve problems with a flaming sword.",
         "archetype": "Gruff, impatient, and brutally direct.",
@@ -323,6 +328,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Sonic the Hedgehog",
+        "clue_tags": ["blue fur", "sneaker tread", "food crumbs"],
         "occupation": "Supersonic Hero",
         "bio": "The fastest thing alive. Impatient, cocky, hates standing still or overthinking problems. Always ready to run.",
         "archetype": "Energetic, impatient, and snarky.",
@@ -387,6 +393,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Ted Lasso",
+        "clue_tags": ["food crumbs", "chalk dust", "muddy boots"],
         "occupation": "Football Coach",
         "bio": "An endlessly optimistic American coaching soccer in the UK. Believes in people, uses folksy metaphors, and tries to unite everyone.",
         "archetype": "Optimistic, folksy, and empathetic.",

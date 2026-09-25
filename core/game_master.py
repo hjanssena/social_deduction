@@ -21,6 +21,7 @@ class GameMaster:
         self.config = config.get("discussion", {})
         self.debug = config.get("debug", {})
         self.logbook_config = config.get("logbook", {})
+        self.crime_scene_config = config.get("crime_scene", {})
         self.log_dir = os.path.join("logs", datetime.now().strftime("%Y%m%d-%H%M%S"))
         self.io = io or IOHandler()
         self.background = BackgroundWorker()  # Log entries and compaction, behind the player's back
@@ -101,9 +102,8 @@ class GameMaster:
 
     def get_roster_text(self, viewer: str = None) -> str:
         """Builds a brief summary of everyone currently alive. For an NPC viewer each entry is
-        tagged with how their logbook sees that person; otherwise with engine opinions."""
+        tagged with how their logbook sees that person."""
         book = self.state.logbooks.get(viewer) if viewer else None
-        viewer_opinions = self.state.opinions.get(viewer, {}) if viewer else {}
         roster = []
         for name in self.state.alive_characters:
             if name == "Player":
@@ -121,10 +121,6 @@ class GameMaster:
                     entry += " (fellow werewolf - secret)"
                 elif book.relation_to(name):
                     entry += f" (your {book.relation_to(name)})"
-            elif viewer:
-                opinion = viewer_opinions.get(name)
-                if opinion:
-                    entry += f" ({opinion})"
             roster.append(entry)
         return "\n".join(roster)
 
@@ -242,6 +238,9 @@ class GameMaster:
             vote_events = [e for e in state.public_events if e.startswith(f"Day {state.day - 1} votes:")]
             if vote_events:
                 lines.append(vote_events[-1])
+            evidence = state.clues.render_public()
+            if evidence:
+                lines.append(f"Evidence so far: {evidence}")
             lines.append(f"It is now Day {state.day}. {len(state.alive_characters)} people remain alive.")
         return " ".join(lines)
 

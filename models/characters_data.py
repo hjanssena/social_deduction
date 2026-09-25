@@ -3,6 +3,7 @@
 RAW_CHARACTER_DATA = [
     {
         "name": "Elias",
+        "clue_tags": ["soot", "calloused hands", "heavy boots"],
         "color": 215,
         "occupation": "Village Blacksmith",
         "bio": "Physically imposing, deeply distrustful of outsiders. Has worked the forge his entire life.",
@@ -68,6 +69,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Silas",
+        "clue_tags": ["ink stains", "candle wax", "parchment scraps"],
         "color": 75,
         "occupation": "Scholar / Record Keeper",
         "bio": "Considers himself the only educated person in the village. Views the crisis as a puzzle to be solved.",
@@ -133,6 +135,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Victor",
+        "clue_tags": ["ink stains", "wine", "fine wool"],
         "color": 141,
         "occupation": "Village Mayor",
         "bio": "Inherited his position. Cares more about his public image than solving the crisis. Loud but not smart.",
@@ -193,6 +196,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Elara",
+        "clue_tags": ["flour", "woodsmoke", "calloused hands"],
         "color": 211,
         "occupation": "Village Baker",
         "bio": "The heart of the village. Kind, naive, hates conflict. Easily swayed by a sad story.",
@@ -258,6 +262,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Garrick",
+        "clue_tags": ["wine", "woodsmoke", "cellar mud"],
         "color": 114,
         "occupation": "Tavern Keeper",
         "bio": "Hears every secret in town. Charming and uses humor to defuse tension, but always calculating the winning side.",
@@ -323,12 +328,13 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Bram",
+        "clue_tags": ["pipe tobacco", "candle wax", "cellar mud"],
         "color": 180,
         "occupation": "Village Elder",
         "bio": "The oldest living resident of the village. He remembers the last time the wolves came, decades ago. He commands deep respect through his age and memory, often subtly undermining Victor's 'modern' authority. He views everyone else as impulsive children.",
         "archetype": "Stubborn, patronizing, and anchored in the past.",
         "speech_pattern": "Slow, condescending, and relies heavily on historical comparisons or old village lore. He never raises his voice.",
-        "verbal_quirks": "CRITICAL: When arguing or accusing, ALWAYS reference the past or dead villagers. Examples: 'You speak just like old Miller did before the rot took him.', 'The Mayor talks of safety, but the soil remembers the winter of forty-two.', 'Patience, child. Panic is for those who haven't seen true winters.'",
+        "verbal_quirks": "Measures everything against the village's long memory: compares people to villagers long dead, recalls old winters, feuds and funerals, and calls younger folk 'child'. Invents a different memory each time rather than repeating one. Examples: 'You speak just like the old ferryman did, the year the river froze.' 'Patience, child. Panic is for those who haven't seen true winters.'",
         "stats": {
             "assertion_drive": 3,
             "contrarian_index": 4,
@@ -345,7 +351,7 @@ RAW_CHARACTER_DATA = [
         "speech_examples": {
             "accuse": {
                 "{target} has been too quiet and evasive": "You sit in silence like a guilty pup, {target}. The old ones always warned us of the quiet ones.",
-                "{target}'s story doesn't hold up to scrutiny": "Pah. Your tale is as flimsy as old Miller's excuses before the rot took him, {target}.",
+                "{target}'s story doesn't hold up to scrutiny": "Pah. Your tale is as flimsy as a fence post after the spring floods, {target}.",
                 "Something about {target}'s behavior is deeply suspicious": "The soil remembers, {target}. Your nervous shifting betrays a guilt I have seen a hundred times.",
                 "{target} has been dodging questions all day": "{target} turns away from questions just like the Carter boy in '56. And we all know how that ended."
             },
@@ -367,7 +373,7 @@ RAW_CHARACTER_DATA = [
             "disagree": {
                 "{target}'s reasoning has serious holes": "Your words are hollow, {target}. The reasoning you present is riddled with rot.",
                 "I can't accept {target}'s conclusion without more proof": "I have lived too long to accept such a flawed conclusion without proof, {target}.",
-                "{target} is jumping to conclusions too quickly": "Patience, child. You panic over shadows, {target}, just like old Miller used to."
+                "{target} is jumping to conclusions too quickly": "Patience, child. You panic over shadows, {target}, like the young ones always did before a hard frost."
             },
             "question": {
                 "{target} hasn't explained their whereabouts": "Where were you when the moon was high, {target}? The village remembers.",
@@ -388,6 +394,7 @@ RAW_CHARACTER_DATA = [
     },
     {
         "name": "Maeve",
+        "clue_tags": ["fresh earth", "calloused hands", "heavy boots"],
         "color": 67,
         "occupation": "Gravedigger",
         "bio": "More comfortable around the dead than the living. Exhausted, fearless, no social grace. Only speaks with proof.",

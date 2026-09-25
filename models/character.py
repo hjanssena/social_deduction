@@ -11,6 +11,7 @@ class Character:
         self.prologue_reactions = profile_data.get("prologue_reactions", [])
         self.speech_examples = profile_data.get("speech_examples", {})
         self.color = profile_data.get("color")  # 256-color ANSI code; see core/colors.py
+        self.clue_tags = profile_data.get("clue_tags", [])  # Traces they could leave at a crime scene
         
         # Parse mechanical stats, defaulting to 5 if missing
         stats = profile_data.get("stats", {})

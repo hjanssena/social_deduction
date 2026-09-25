@@ -58,7 +58,7 @@ class ArrivalPhase:
 
         for name in mentioned:
             occupation = gm.characters[name].occupation.lower()
-            io.show_narration(f"{name}, the {occupation}, watches you from across the room but says nothing.")
+            io.show_narration(f"You also notice {name}, the {occupation}, among the faces in the room.")
         io.pause()
 
         # Those who met the traveler write about it while the evening goes on
