@@ -69,7 +69,13 @@ class VotingPhase:
             thoughts = vote_data.get("thought_process", "...")
             all_votes[npc] = target
 
-            io.show_vote(npc, target, thoughts=thoughts)
+            # The reasoning is private (a wolf's is its scheming): only the public line is shown,
+            # and only if it gives nothing away
+            says = vote_data.get("says", "")
+            if says and gm.conversation_controller.leaks_secret(npc, says):
+                says = ""
+            io.show_vote(npc, target, says=says,
+                         thoughts=thoughts if gm.debug.get("show_logic") else "")
 
             if target == "None":
                 state.logical_history.append(

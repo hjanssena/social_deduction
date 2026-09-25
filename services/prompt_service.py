@@ -513,9 +513,13 @@ class PromptService:
         prompt += f"\nValid votes: {', '.join(candidates)}, None"
         prompt += f" (packmates are not valid votes)\n\n" if pack else "\n\n"
         prompt += (
+            "Each voter also says one short sentence aloud as they cast their vote, in their own voice. "
+            "Everyone hears it, so it gives only reasons the town itself saw today and never reveals a "
+            "secret: no role, no pack, nothing from the private reasoning."
+            + (" A wolf's line must sound like an honest villager's." if pack else "") + "\n\n"
             'Respond with ONLY a JSON object:\n'
-            '{"votes": [{"voter": "<name>", "reasoning": "<1-2 sentences from the voter\'s own point '
-            'of view>", "vote": "<name or None>"}, ...]}\n'
+            '{"votes": [{"voter": "<name>", "reasoning": "<private, 1-2 sentences from the voter\'s own '
+            'point of view>", "vote": "<name or None>", "says": "<the one sentence said aloud>"}, ...]}\n'
             "Include every voter exactly once."
         )
         return prompt

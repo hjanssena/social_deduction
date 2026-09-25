@@ -81,21 +81,25 @@ class ConversationController:
         lines = [v for v in examples.values() if "{target}" not in v]
         return lines[0] if lines else "I'd rather keep my thoughts to myself for now."
 
-    def leaks_secret(self, name: str, text: str, listener: str = None) -> bool:
+    def leaks_secret(self, name: str, text: str, listener: str = None, allow_claims: bool = False) -> bool:
         """True if `text` gives away the speaker's secret: a wolf owning up or naming its pack,
         or anyone claiming a role (claims only happen in public, through the discussion loop).
-        Wolves talking privately to a packmate have no secret to keep from them."""
+        Wolves talking privately to a packmate have no secret to keep from them.
+        allow_claims: role claims are fine here (final words); only a wolf owning up counts."""
         state = self.gm.state
         if not state.roles_known or (listener and self._is_packmate(name, listener)):
             return False
         t = text.lower()
-        if re.search(rf"\b(i am|i'm|we are|we're)\s+(a |an |the )?{ROLE_NAMES}\b", t):
-            return True
         role = state.roles.get(name)
-        if role == "guardian_angel" and re.search(r"\bi (protected|watched over|shielded)\b", t):
-            return True
+        if not allow_claims:
+            if re.search(rf"\b(i am|i'm|we are|we're)\s+(a |an |the )?{ROLE_NAMES}\b", t):
+                return True
+            if role == "guardian_angel" and re.search(r"\bi (protected|watched over|shielded)\b", t):
+                return True
         if role == "werewolf":
             if re.search(rf"\b(i am|i'm|we are|we're)\s+(a |the |one of the )?{WOLF_WORDS}", t):
+                return True
+            if re.search(r"\b(we|us)\s+(were)?wol(f|ves)\b", t):
                 return True
             if re.search(r"\b(my|our) (pack|kind)\b", t):
                 return True

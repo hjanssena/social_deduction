@@ -573,7 +573,8 @@ class NPCController:
                     who = "themselves" if target == voter else f"{target}, their own packmate"
                     mistakes.append(f"{voter} voted for {who}")
                     continue
-                results[voter] = {"target": target, "thought_process": str(entry.get("reasoning", "")).strip()}
+                results[voter] = {"target": target, "thought_process": str(entry.get("reasoning", "")).strip(),
+                                  "says": str(entry.get("says", "")).strip().strip('"')}
             if all(v in results for v in group) or not mistakes:
                 break
             prompt += (f"\n\nYour last answer was invalid: {'; '.join(mistakes)}. "
@@ -644,5 +645,13 @@ class NPCController:
             character=char_obj,
         )
 
+        # Last words are public: a wolf may lie, rage or fake a role, but never confess
+        leaks = lambda text: self.gm.conversation_controller.leaks_secret(character_name, text, allow_claims=True)
         dialogue = self.gm.llm.generate_text(system_prompt, user_prompt)
-        return dialogue if dialogue else "..."
+        if dialogue and leaks(dialogue):
+            dialogue = self.gm.llm.generate_text(
+                system_prompt, user_prompt + f'\n\nYou almost said: "{dialogue}". That confesses what you are. '
+                                             "Say something else.")
+        if not dialogue or leaks(dialogue):
+            dialogue = "You're making a mistake. Mark my words, the killing won't stop with me."
+        return dialogue

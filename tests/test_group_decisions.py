@@ -22,7 +22,7 @@ def test_village_votes_are_taken_and_bad_ones_fall_back(gm, llm):
     ]
     res = gm.npc_controller.decide_votes(voters)
     assert res[a]["target"] == b
-    assert res[b] == {"target": a, "thought_process": "r2"}
+    assert res[b] == {"target": a, "thought_process": "r2", "says": ""}
     assert set(res) == set(voters)  # everyone else filled in by the engine
 
 
