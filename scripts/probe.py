@@ -80,7 +80,8 @@ class ProbeIO(HeadlessIO):
         m = SAY.search(text)
         if m:
             return self._say(m.group(1), int(m.group(2)) if m.group(2) else None)
-        if ("raise a new topic" in text or "make an assertion" in text) and s.day not in self.asserted_on:
+        if ("raise a new topic" in text or "make an assertion" in text or "join in" in text) \
+                and s.day not in self.asserted_on:
             self.asserted_on.add(s.day)
             return self._false_quote()
         if "reaction to the verdict" in text and s.day not in self.aftermath_asked and s.last_verdict:
@@ -256,6 +257,28 @@ def audit(llm, run: dict) -> dict:
 SPEECH = re.compile(r"^(?:\[Role claim: [^\]]+\] )?\[(\w+) -> (\w+)\]: (.+)$")
 PLAIN = re.compile(r"\b(plain(ly)?|straight)\b", re.IGNORECASE)
 
+STRUCTURE_JUDGE = (
+    "You rate one day's discussion in a werewolf village game as a reader would experience it. "
+    "structure, 1-5: 5 = a structured discussion that follows one line of inquiry about the killing, each line "
+    "building on the ones before toward who did it; 3 = mostly coherent but jumping between points; 1 = scattered, "
+    "people talking past each other and hopping between subjects. subjects: how many distinct subjects the day "
+    "jumps between. Respond with JSON only."
+)
+
+
+def day_scenes(lines: list[str]) -> dict[int, str]:
+    """{day: what the village woke up to}: the morning's crime scene (or quiet morning) text."""
+    scenes, day, inside = {}, 0, False
+    for line in lines:
+        m = re.search(r"--- PHASE: (.*) \(DAY (\d+)\) ---", line)
+        if m:
+            inside, day = m.group(1) == "MORNING", int(m.group(2))
+            continue
+        if inside and line.strip() and not line.startswith(("[Logic", "[Press")):
+            scenes[day] = (scenes.get(day, "") + " " + line.replace("[System] ", "")).strip()
+    return scenes
+
+
 TOPIC_JUDGE = (
     "You label every line of a group conversation. Lines are numbered. For each line decide:\n"
     "- reply: it responds to something said in the 3 lines right before it (answers, backs, challenges or "
@@ -266,6 +289,9 @@ TOPIC_JUDGE = (
     "- non_sequitur: it answers a question nobody asked, misreads who said what, or makes no sense after "
     "the lines before it.\n"
     "Be strict: a line that merely mentions the same person but changes the subject is new_topic. "
+    "Also mark each line on_theme: true if it is about the day's killing (the body, the crime scene and its "
+    "traces, who could have done it, alibis, role claims, votes or reports as they bear on it); false if it "
+    "is about something else (manners, old grudges, village business, the stranger's trade).\n"
     "Respond with JSON only."
 )
 
@@ -292,7 +318,7 @@ def discussion_days(lines: list[str]) -> dict[int, list[tuple[str, str, str, boo
             continue
         if inside and "Discussion ended" in line:
             inside = False
-        if re.search(r"\[System\] (Assertion \d+/\d+|— thread \d+:)", line):
+        if re.search(r"\[System\] (Assertion \d+/\d+|— thread \d+:|— angle \d+:)", line):
             opening = not player_opened  # a thread the Player opened starts with their (uncounted) line
             player_opened = False
             continue
@@ -309,9 +335,11 @@ def discussion_days(lines: list[str]) -> dict[int, list[tuple[str, str, str, boo
 
 def discussion_metrics(run: dict, llm=None) -> dict:
     days = discussion_days(run["lines"])
+    scenes = day_scenes(run["lines"])
     npcs = set(run["final_truth"]["roles"]) - {"Player"}
     total = {"days": len(days), "lines": 0, "questions": 0, "unanswered": 0, "near_repeats": 0,
-             "plain": 0, "openers": 0, "follow_ups": 0, "opener_replies": 0, "drift": 0, "echo": 0, "off_topic": 0,
+             "plain": 0, "openers": 0, "follow_ups": 0, "opener_replies": 0, "drift": 0, "echo": 0, "off_topic": 0, "off_theme": 0,
+             "structure_sum": 0, "subjects_sum": 0, "rated_days": 0,
              "player_questions": 0, "player_answered": 0}
     for day, said in days.items():
         total["lines"] += sum(1 for w, *_ in said if w != "Player")
@@ -327,10 +355,23 @@ def discussion_metrics(run: dict, llm=None) -> dict:
             total["plain"] += bool(PLAIN.search(text))
         if llm is not None and said:
             numbered = "\n".join(f"{n + 1}. [{w} -> {t}]: {x}" for n, (w, t, x, _) in enumerate(said))
-            verdict = llm.generate_json(TOPIC_JUDGE, f"CONVERSATION:\n{numbered}\n\n"
-                                        'Return {"labels": [{"n": 1, "label": "reply|new_topic|echo|non_sequitur"}, ...]} '
-                                        "with one entry per line.") or {}
-            labels = {x.get("n"): str(x.get("label", "")) for x in verdict.get("labels", []) if isinstance(x, dict)}
+            scene = scenes.get(day, "(unknown)")
+            verdict = llm.generate_json(TOPIC_JUDGE, f"WHAT THE VILLAGE WOKE UP TO THIS MORNING:\n{scene}\n\n"
+                                        f"CONVERSATION:\n{numbered}\n\n"
+                                        'Return {"labels": [{"n": 1, "label": "reply|new_topic|echo|non_sequitur", '
+                                        '"on_theme": true}, ...]} with one entry per line.') or {}
+            rating = llm.generate_json(STRUCTURE_JUDGE, f"WHAT THE VILLAGE WOKE UP TO THIS MORNING:\n{scene}\n\n"
+                                       f"CONVERSATION:\n{numbered}\n\n"
+                                       'Return {"structure": <1-5>, "subjects": <number>}.') or {}
+            if isinstance(rating.get("structure"), (int, float)):
+                total["structure_sum"] += rating["structure"]
+                total["subjects_sum"] += rating.get("subjects", 0) if isinstance(rating.get("subjects"), (int, float)) else 0
+                total["rated_days"] += 1
+            entries = {x.get("n"): x for x in verdict.get("labels", []) if isinstance(x, dict)}
+            labels = {n: str(x.get("label", "")) for n, x in entries.items()}
+            for n, (who, *_rest) in enumerate(said, start=1):
+                if who != "Player" and entries.get(n, {}).get("on_theme") is False:
+                    total["off_theme"] += 1
             for n, (who, _, _, opens) in enumerate(said, start=1):
                 if who == "Player":
                     continue
@@ -357,6 +398,9 @@ def discussion_metrics(run: dict, llm=None) -> dict:
                  opener_reply_rate=round(total["opener_replies"] / max(1, total["openers"]), 2),
                  drift_rate=round(total["drift"] / max(1, total["follow_ups"]), 3),
                  echo_rate=round(total["echo"] / lines, 3),
+                 off_theme_rate=round(total["off_theme"] / lines, 3),
+                 structure=round(total["structure_sum"] / max(1, total["rated_days"]), 2),
+                 subjects_per_day=round(total["subjects_sum"] / max(1, total["rated_days"]), 1),
                  off_topic_rate=round(total["off_topic"] / lines, 3))
     return total
 
@@ -442,7 +486,7 @@ def main():
         keys = ("lines_per_day", "unanswered_rate", "repeat_rate", "plain_rate", "off_topic_rate")
         sums = {k: sum(r[k] for r in rows) for k in ("lines", "questions", "unanswered", "near_repeats", "plain",
                                                      "openers", "follow_ups", "opener_replies", "drift",
-                                                     "echo", "off_topic", "days", "player_questions", "player_answered")}
+                                                     "echo", "off_topic", "off_theme", "structure_sum", "subjects_sum", "rated_days", "days", "player_questions", "player_answered")}
         print(json.dumps({"ALL": True, **sums,
                           "lines_per_day": round(sums["lines"] / max(1, sums["days"]), 1),
                           "unanswered_rate": round(sums["unanswered"] / max(1, sums["questions"]), 2),
@@ -451,6 +495,9 @@ def main():
                           "opener_reply_rate": round(sums["opener_replies"] / max(1, sums["openers"]), 2),
                           "drift_rate": round(sums["drift"] / max(1, sums["follow_ups"]), 3),
                           "echo_rate": round(sums["echo"] / max(1, sums["lines"]), 3),
+                          "off_theme_rate": round(sums["off_theme"] / max(1, sums["lines"]), 3),
+                          "structure": round(sums["structure_sum"] / max(1, sums["rated_days"]), 2),
+                          "subjects_per_day": round(sums["subjects_sum"] / max(1, sums["rated_days"]), 1),
                           "off_topic_rate": round(sums["off_topic"] / max(1, sums["lines"]), 3)}))
         return
 

@@ -17,45 +17,45 @@ def test_valid_decision_passes_through(gm, llm):
     speaker, other = npc_names(gm)[:2]
     llm.json_answers = [{"intent": "Accuse", "target": other.lower(), "emotion": "Angry",
                          "dialogue": f"{other} lies!", "thought": "t"}]
-    r = gm.npc_controller.take_turn(speaker, "open", None, [])
+    r = gm.npc_controller.take_turn(speaker, "lead", None, "Who killed Silas?")
     assert (r["intent"], r["target"], r["emotion"]) == ("accuse", other, "angry")
 
 
 def test_defending_yourself_becomes_defend_self(gm, llm):
     speaker = npc_names(gm)[0]
     llm.json_answers = [{"intent": "defend", "target": speaker, "dialogue": "I did nothing"}]
-    r = gm.npc_controller.take_turn(speaker, "open", None, [])
+    r = gm.npc_controller.take_turn(speaker, "lead", None, "Who killed Silas?")
     assert (r["intent"], r["target"]) == ("defend_self", "None")
 
 
 def test_missing_target_recovered_from_dialogue(gm, llm):
     speaker, other = npc_names(gm)[:2]
     llm.json_answers = [{"intent": "accuse", "target": "None", "dialogue": f"{other}, you lie."}]
-    r = gm.npc_controller.take_turn(speaker, "open", None, [])
+    r = gm.npc_controller.take_turn(speaker, "lead", None, "Who killed Silas?")
     assert (r["intent"], r["target"]) == ("accuse", other)
 
 
 def test_unknown_intent_and_emotion_fall_back_to_neutral(gm, llm):
     speaker = npc_names(gm)[0]
     llm.json_answers = [{"intent": "dance", "target": "Nobody", "dialogue": "hi", "emotion": "giddy"}]
-    r = gm.npc_controller.take_turn(speaker, "open", None, [])
+    r = gm.npc_controller.take_turn(speaker, "lead", None, "Who killed Silas?")
     assert (r["intent"], r["target"], r["emotion"]) == ("neutral", "None", "neutral")
 
 
 def test_empty_opening_leaves_the_floor(gm, llm):
-    assert gm.npc_controller.take_turn(npc_names(gm)[0], "open", None, []) is None
+    assert gm.npc_controller.take_turn(npc_names(gm)[0], "lead", None, "Who killed Silas?") is None
 
 
 def test_passing_joiner_returns_none(gm, llm):
     speaker, reactor = npc_names(gm)[:2]
     llm.json_answers = [{"intent": "silent", "dialogue": ""}]
-    assert gm.npc_controller.take_turn(reactor, "join", thread(speaker, "accuse", reactor, "x"), []) is None
+    assert gm.npc_controller.take_turn(reactor, "join", thread(speaker, "accuse", reactor, "x"), "Who killed Silas?") is None
 
 
 def test_answer_agreeing_without_target_agrees_with_the_asker(gm, llm):
     speaker, reactor = npc_names(gm)[:2]
     llm.json_answers = [{"intent": "agree", "target": "None", "dialogue": "Aye."}]
-    r = gm.npc_controller.take_turn(reactor, "answer", thread(speaker, "question", reactor, "Right?"), [])
+    r = gm.npc_controller.take_turn(reactor, "answer", thread(speaker, "question", reactor, "Right?"), "Who killed Silas?")
     assert (r["intent"], r["target"]) == ("agree", speaker)
 
 
@@ -64,7 +64,7 @@ def test_repeat_guard_retries_once(gm, llm):
     gm.record_action(speaker, "neutral", dialogue="Easy there, friend.")
     llm.json_answers = [{"intent": "neutral", "dialogue": "Easy there, friend!"},
                         {"intent": "neutral", "dialogue": "Pour another."}]
-    r = gm.npc_controller.take_turn(speaker, "open", None, [])
+    r = gm.npc_controller.take_turn(speaker, "lead", None, "Who killed Silas?")
     assert r["dialogue"] == "Pour another."
     assert "You already said" in llm.last_prompt
 
@@ -88,4 +88,4 @@ def test_repeat_guard_catches_copied_example_lines(gm, llm):
     examples = gm.characters[speaker].speech_examples.get("neutral", {})
     example = next(v for v in examples.values() if "{target}" not in v)
     llm.json_answers = [{"intent": "neutral", "dialogue": example}, {"intent": "neutral", "dialogue": "Fresh words."}]
-    assert gm.npc_controller.take_turn(speaker, "open", None, [])["dialogue"] == "Fresh words."
+    assert gm.npc_controller.take_turn(speaker, "lead", None, "Who killed Silas?")["dialogue"] == "Fresh words."

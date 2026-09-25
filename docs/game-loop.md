@@ -49,54 +49,49 @@ flowchart TD
 
 ## Discussion loop (current implementation)
 
-The day's discussion runs as **threads**, one topic at a time. The engine (`core/discussion_director.py`) picks
-every speaker; the LLM decides what they say or whether they pass. Design and measurements:
+The day's discussion is **one conversation about last night's killing**. The engine
+(`core/discussion_director.py`) picks every speaker; the LLM decides what they say or whether they pass. Every
+prompt leads with the day's question and the last two lines. Design and measurements:
 [`discussion-threads.md`](discussion-threads.md).
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 420}}}%%
 flowchart TD
-    begin(["Discussion phase starts"]) --> morning["Condense yesterday's chat into a summary<br/>Morning reports from anyone who already claimed a role<br/>(reports go into EARLIER TODAY)"]
-    morning --> primer["Town crier primer"]
-    primer --> budget{"Spoken lines left today?<br/>turns_per_day"}
+    begin(["Discussion phase starts"]) --> morning["Condense yesterday's chat into a summary<br/>Morning reports from anyone who already claimed a role"]
+    morning --> theme["Today's question: who killed the victim, where they were found, the traces<br/>(or, after a quiet night, who was spared and why), plus the morning reports"]
+    theme --> budget{"Spoken lines left today?<br/>turns_per_day"}
     budget -- no --> silence["Player silence penalty if too quiet"]
     silence --> toVote(["Voting phase"])
 
-    budget -- yes --> claim{"Role claim due?<br/>(engine reveal check)"}
-    claim -- yes --> openClaim["The claim opens the thread (LLM line)"]
-    claim -- no --> pOpen{"Player types a new topic?"}
-    pOpen -- yes --> openPlayer["The Player's line opens the thread (parsed for intent and target)"]
-    pOpen -- no --> openNpc["Opener picked by drive with decay (boost: accused and silent)<br/>OPEN prompt: not the topic just closed, nothing on EARLIER TODAY"]
-    openClaim --> commit
-    openPlayer --> commit
-    openNpc --> commit
-
-    commit["Commit: chat history, public record, trust, suspicion<br/>Thread notes who owes an answer"] --> over{"Thread over?<br/>turn cap, 2 passes in a row, budget<br/>(a last question still gets its answer)"}
-    over -- yes --> close["Summary line into EARLIER TODAY<br/>Prefetch the next opener"]
-    close --> budget
-
-    over -- no --> join{"Player joins in?"}
-    join -- yes --> pTurn["The Player's line joins the thread;<br/>whoever they ask or accuse answers next"]
+    budget -- yes --> claim{"Role claim due?<br/>(engine check every 4 lines)"}
+    claim -- yes --> claimLine["The claim is spoken into the conversation"]
+    claimLine --> commit
+    claim -- no --> pInput{"Player speaks?"}
+    pInput -- yes --> pTurn["The Player's line joins the conversation;<br/>whoever they ask or accuse answers next"]
     pTurn --> commit
-    join -- no --> next{"Next speaker (director)"}
-    next -- "owes an answer: an NPC" --> answer["ANSWER prompt: the line to answer, quoted"]
-    next -- "owes an answer: the Player" --> forced["Forced prompt, once per thread;<br/>silence goes on the record"]
-    next -- "has a stake (named, targeted, friend or packmate)" --> joinNpc["JOIN prompt: add something new, or pass"]
-    next -- "nobody" --> close
+    pInput -- no --> next{"Next speaker (director)"}
+
+    next -- "owes an answer: an NPC" --> answer["ANSWER: the line to answer, quoted"]
+    next -- "owes an answer: the Player" --> forced["Forced prompt; silence goes on the record"]
+    next -- "has a stake in the last two lines<br/>(named, targeted, friend, packmate)" --> join["JOIN: respond to what was just said, or pass"]
+    next -- "first line, two passes in a row,<br/>or nobody with a stake" --> lead["LEAD: open the day with the killing,<br/>or move on to a new angle of it"]
     answer --> commit
     forced --> commit
-    joinNpc --> passed{"Passed?"}
-    passed -- yes --> over
+    join --> passed{"Passed?"}
+    passed -- yes --> budget
     passed -- no --> commit
+    lead --> commit
+
+    commit["Commit: chat history, public record, trust, suspicion<br/>The conversation notes who owes an answer"] --> budget
 
     subgraph turnCall ["Turn LLM call (NPCController.take_turn)"]
-        ctx["Prompt: role and goal, voice, logbook<br/>Situation, living roster tagged by relation, role claims<br/>EARLIER TODAY (reports, one line per closed thread)<br/>THIS CONVERSATION (the current thread, in order), what concerns you"]
-        ctx --> json["Model returns thought, intent, target, emotion, dialogue (+ topic when opening)"]
-        json --> validate["Validate: known intent, living target, target recovered from the line<br/>Near-repeat of the speaker's own line or anyone's line in the thread: one retry"]
+        ctx["Prompt: role and goal, voice, logbook<br/>Situation, living roster tagged by relation, role claims<br/>TODAY'S QUESTION, earlier lines (compact, for reference)<br/>what you said earlier today, JUST SAID (the last two lines), what concerns you"]
+        ctx --> json["Model returns thought, intent, target, emotion, dialogue (+ angle when leading)"]
+        json --> validate["Validate: known intent, living target, target recovered from the line<br/>Near-repeat of the speaker's own line or a recent line by anyone: one retry"]
     end
-    openNpc -. "generates with" .-> ctx
     answer -. "generates with" .-> ctx
-    joinNpc -. "generates with" .-> ctx
+    join -. "generates with" .-> ctx
+    lead -. "generates with" .-> ctx
 ```
 
 ## Decisions
@@ -128,5 +123,5 @@ flowchart TD
 | **Constant abstaining makes wolves win by attrition.** | Abstain only if the voter truly suspects no one. The bickering after a no-hang day raises the pressure for the next day. |
 | **A wolf fake-claims the save after a quiet night.** The wolves know exactly who they attacked, which makes the lie strong. | This is intended. The real Guardian Angel can counter-claim, and the existing duplicate-claim suspicion applies to both. |
 | **Latency: every LLM call takes about 8s on the test server.** | Votes run while the Player votes. Compaction and the crime scene run while the morning text is shown. Discussion lines are prefetched. Group calls (votes, pack, Guardian Angel) replace per-character calls. |
-| **The discussion drifts:** replies wander off, new rounds only continue the last one, questions go unanswered. | Threads: one topic at a time, whoever is asked answers next, joiners see only the current exchange and may pass, openers are told which topic just closed. Measured by `scripts/probe.py --metrics`. |
+| **The discussion drifts or scatters:** replies wander off, questions go unanswered, the day hops between subjects. | One conversation a day about the killing: every prompt leads with the day's question and the last two lines, whoever is asked answers next, and when the exchange runs dry someone moves it to a new angle of the killing. Measured by `scripts/probe.py --metrics`. |
 | **The model returns a bad answer**, such as an illegal vote, an unknown name or malformed JSON. | Every decision is validated. Illegal votes get one retry that names the mistake, then the stat engine stands in. `DEBUG_SHOW_LOGIC` shows the raw answer whenever it falls back. |

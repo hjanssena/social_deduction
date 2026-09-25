@@ -203,7 +203,7 @@ class NPCController:
             "emotion": emotion,
             "reasoning": str(data.get("thought", "")).strip(),
             "dialogue": dialogue,
-            "topic": str(data.get("topic") or "").strip().strip('"').rstrip(".")[:80],
+            "topic": str(data.get("angle") or data.get("topic") or "").strip().strip('"').rstrip(".")[:80],
         }
 
     def _decide(self, name: str, prompt: str, allowed: str, fallback_target: str = "None",
@@ -251,31 +251,41 @@ class NPCController:
                  and r["dialogue"] not in in_thread]
         return lines[-limit:]
 
-    def take_turn(self, name: str, role: str, thread, earlier_today: list[str], last_topic: str = "") -> dict | None:
-        """One line in the day's discussion (see DiscussionDirector). role is "open", "answer" or "join".
-        Pure generation, no state changes. Returns None when a joiner passes or an opener has nothing to say."""
-        last = thread.last if thread is not None else None
+    JUST_SAID = 2  # the last lines a speaker must respond to; older ones are reference only
+    EARLIER_LINES = 10  # how many older lines of the day's discussion are kept for reference
+    EARLIER_CHARS = 160
+
+    def take_turn(self, name: str, role: str, thread, theme: str) -> dict | None:
+        """One line in the day's discussion (see DiscussionDirector). role is "lead", "answer" or "join".
+        The prompt puts the day's question (theme) and the last two lines up front; older lines of the
+        day come compacted, for reference. Pure generation, no state changes. Returns None when a joiner
+        passes or a lead has nothing to say."""
+        turns = thread.turns if thread is not None else []
+        last = turns[-1] if turns else None
         owed_by, owed_line = (last.speaker, last.dialogue) if role == "answer" and last else ("", "")
+        earlier = [self._compact(t.line()) for t in turns[:-self.JUST_SAID]][-self.EARLIER_LINES:]
         prompt = self.gm.prompt_builder.build_turn_prompt(
             character=self.gm.characters[name], role=role, day=self.gm.state.day,
             game_context=self.gm.get_game_context(), roster_text=self.gm.get_roster_text(viewer=name),
-            claims_text=self.gm.get_claims_text(), earlier_today=earlier_today,
-            thread_text=thread.render() if thread is not None else "",
+            claims_text=self.gm.get_claims_text(), theme=theme,
+            earlier_lines=earlier, just_said=[t.line() for t in turns[-self.JUST_SAID:]],
             stakes_text=self._stakes_text(name, last.speaker if last else None, last.target if last else None),
-            owed_by=owed_by, owed_line=owed_line, last_topic=last_topic,
-            own_lines=self._said_today(name, exclude=thread.turns if thread is not None else ()),
+            owed_by=owed_by, owed_line=owed_line, own_lines=self._said_today(name, exclude=turns),
         )
         allowed = NPC_INTENTS + ("|pass|silent" if role == "join" else "")
-        others = [(t.speaker, t.dialogue) for t in thread.turns] if thread is not None else []
+        others = [(t.speaker, t.dialogue) for t in turns[-6:]]
         result = self._decide(name, prompt, allowed, fallback_target=owed_by or "None", others=others)
 
-        if role in ("join", "open") and (result["intent"] in ("pass", "silent") or not result["dialogue"]):
-            return None  # a joiner passes; an opener with nothing to say leaves the floor to someone else
+        if role in ("join", "lead") and (result["intent"] in ("pass", "silent") or not result["dialogue"]):
+            return None  # a joiner passes; a lead with nothing to say leaves the floor to someone else
         if not result["dialogue"]:
             result.update(intent="deflect", target="None", dialogue=self.gm.conversation_controller._deflection(name))
         if result["intent"] in ("pass", "silent"):
             result["intent"] = "neutral"
         return result
+
+    def _compact(self, line: str) -> str:
+        return line if len(line) <= self.EARLIER_CHARS else line[:self.EARLIER_CHARS].rsplit(" ", 1)[0] + "..."
 
     # ================================================================
     # MORNING & AFTERMATH

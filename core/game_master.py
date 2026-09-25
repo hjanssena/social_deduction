@@ -254,6 +254,32 @@ class GameMaster:
             lines.append(f"It is now Day {state.day}. {len(state.alive_characters)} people remain alive.")
         return " ".join(lines)
 
+    def get_day_theme(self, reports: list[str] = ()) -> str:
+        """Today's question, which the whole discussion is about: last night's killing and its crime scene
+        (or, after a quiet night, who was spared and why), plus this morning's role reports."""
+        state = self.state
+        if state.killed_last_night:
+            victim = state.killed_last_night[0]
+            lines = [f"Who killed {victim} last night?"]
+            clues = state.clues.on_day(state.day)
+            if clues:
+                lines.append(f"{victim} was found at {clues[0].location}, with traces of "
+                             f"{', '.join(c.tag for c in clues)} beside the body.")
+            lines.append("Everything said today should help answer it: the traces and who could have left them, "
+                         "who found the body and when, where people were last night, what the claims and reports "
+                         "say, and how people have reacted.")
+        else:
+            lines = ["Nobody died last night. Who was spared, and why: did someone protect them, or did the "
+                     "wolves hold back? And who among us are the wolves?"]
+            verdict = state.last_verdict
+            if verdict and verdict["day"] == state.day - 1:
+                lines.append(f"Yesterday: {verdict['text']}")
+            lines.append("Everything said today should help answer it: claims about the night, yesterday's vote, "
+                         "and what the evidence so far shows.")
+        if reports:
+            lines.append("This morning's reports: " + " ".join(reports))
+        return " ".join(lines)
+
     def sanitize_target(self, target: str, pool: list[str] = None) -> str:
         """Maps an LLM-supplied target onto an exact name from `pool` (default: the living), or 'None'.
         Accepts different casing, extra words ("Silas the scholar"), a first name alone

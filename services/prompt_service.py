@@ -260,59 +260,62 @@ class PromptService:
 
     @staticmethod
     def build_turn_prompt(character, role: str, day: int, game_context: str, roster_text: str,
-                          claims_text: str, earlier_today: list[str], thread_text: str,
+                          claims_text: str, theme: str, earlier_lines: list[str], just_said: list[str],
                           stakes_text: str = "", owed_by: str = "", owed_line: str = "",
-                          last_topic: str = "", own_lines: list[str] = ()) -> str:
-        """One line in the day's discussion. role: "open" raises a new topic, "answer" answers the
-        question or accusation aimed at the character, "join" adds to the current exchange or passes."""
+                          own_lines: list[str] = ()) -> str:
+        """One line in the day's discussion, which is one conversation about the killing (the theme).
+        role: "lead" opens the discussion or moves it on to a new angle of the killing, "answer" answers
+        the question or accusation aimed at the character, "join" responds to what was just said or passes."""
         prompt = f"SITUATION: {game_context}\n\n"
         prompt += f"WHO IS HERE:\n{roster_text}\n\n"
         if claims_text:
             prompt += f"ROLE CLAIMS:\n{claims_text}\n\n"
-        prompt += "EARLIER TODAY:\n" + ("\n".join(f"- {e}" for e in earlier_today)
-                                        if earlier_today else "(nothing yet, the discussion is just starting)")
-        prompt += "\n\n"
+        prompt += f"TODAY'S QUESTION (the whole discussion is about this):\n{theme}\n\n"
+        if earlier_lines:
+            prompt += "EARLIER IN TODAY'S DISCUSSION (for reference):\n" + "\n".join(earlier_lines) + "\n\n"
         if own_lines:
             prompt += ("WHAT YOU SAID EARLIER TODAY (stay consistent with it, or say why you changed your mind):\n"
                        + "\n".join(f'- "{line}"' for line in own_lines) + "\n\n")
-        if role != "open":
-            prompt += f"THIS CONVERSATION (what is being discussed right now, in order):\n{thread_text}\n\n"
+        if just_said:
+            prompt += "JUST SAID (respond to this):\n" + "\n".join(just_said) + "\n\n"
         if stakes_text:
             prompt += f"WHAT CONCERNS YOU:\n{stakes_text}\n\n"
 
         name = character.name
-        if role == "open":
+        extra = ""
+        if role == "lead" and not just_said:
             prompt += (
-                f"THE FLOOR IS YOURS: {name} raises a new topic with the town.\n"
-                + (f"The town has just finished with this: {last_topic} Do not pick it up again.\n" if last_topic else "")
-                + "Bring up something that is NOT already on the EARLIER TODAY list: a trace from the crime scene, "
-                "a role claim, how someone voted, something someone said or dodged, someone who has kept quiet. "
-                "Go back to a topic from the list only if you have something genuinely new to add to it.\n"
-                "Choose one action:\n" + PromptService.TURN_ACTIONS + "\n"
+                f"{name} opens today's discussion. Start with the killing itself: the body, the traces found "
+                "beside it, who found it, or where people were last night. Speak to the room or ask one person.\n"
             )
-            intents, extra = NPC_INTENTS, '  "topic": "<the topic you raise, in a few words, e.g. the wax at the mill gate>",\n'
-            dialogue = "1-2 sentences you say aloud, in your voice"
+            extra = '  "angle": "<what you bring up, in a few words, e.g. the wax by the body>",\n'
+        elif role == "lead":
+            prompt += (
+                f"The last point has run its course. {name} moves the discussion forward on TODAY'S QUESTION: "
+                "bring up one angle of the killing nobody has covered yet (a trace and who could have left it, "
+                "where someone was last night, a claim or report, how someone reacted to the body). Link it to "
+                "what was just said, so it follows naturally.\n"
+            )
+            extra = '  "angle": "<the new angle, in a few words>",\n'
         elif role == "answer":
             prompt += (
                 f"{owed_by} just said to you: \"{owed_line}\"\n"
-                f"It is {name}'s turn to answer it. Explain, deny, or turn it around, the way {name} would. "
-                "Answer what was actually asked. Ask at most one question back.\n"
-                "Choose one action:\n" + PromptService.TURN_ACTIONS + "\n"
+                f"{name} answers it, the way {name} would: explain, deny, or turn it around. Answer what was "
+                "actually asked, and keep it about the killing. Ask at most one question back.\n"
             )
-            intents, extra = NPC_INTENTS, ""
-            dialogue = "1-2 sentences you say aloud, in your voice"
         else:
             prompt += (
-                f"{name} may join this conversation. Add something new to THIS exchange: back someone, "
-                "challenge them, or ask the one thing nobody has asked yet. Stay on this topic; don't open a "
-                "new one. If you have nothing new to add, or it doesn't concern you, pass.\n"
-                "Choose one action:\n" + PromptService.TURN_ACTIONS + "- pass: say nothing this time.\n\n"
+                f"{name} may respond to what was JUST SAID: back it, challenge it, or ask the obvious follow-up "
+                "nobody has asked yet. Stay on this point and on TODAY'S QUESTION. If you have nothing new to "
+                "add, pass.\n"
             )
-            intents, extra = NPC_INTENTS + "|pass", ""
-            dialogue = "one or two short sentences you say aloud, in your voice; empty if you pass"
-
+        prompt += "Choose one action:\n" + PromptService.TURN_ACTIONS
+        if role == "join":
+            prompt += "- pass: say nothing this time.\n"
         prompt += (
-            "How to decide:\n"
+            "\nHow to decide:\n"
+            "- Every line is about TODAY'S QUESTION. Don't bring up anything else (old grudges, village "
+            "business, the stranger's manners) unless you tie it directly to the killing.\n"
             f"- {PromptService._day_guidance(day)}\n"
             "- Your logbook colors your judgment: you are slow to suspect friends and quick to stand up for "
             "them; you distrust enemies, but you still need a reason to accuse them.\n"
@@ -320,6 +323,9 @@ class PromptService:
             f"- {FACTS_ONLY}\n"
             "- What someone told you in private is yours to use: repeat it if it helps, or keep it to yourself.\n\n"
         )
+        intents = NPC_INTENTS + ("|pass" if role == "join" else "")
+        dialogue = ("one or two short sentences you say aloud, in your voice; empty if you pass" if role == "join"
+                    else "1-2 sentences you say aloud, in your voice")
         fmt = DECISION_FORMAT.format(intents=intents, dialogue=dialogue)
         if extra:
             fmt = fmt.replace('  "thought":', extra + '  "thought":', 1)

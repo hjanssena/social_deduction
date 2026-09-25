@@ -19,22 +19,23 @@ class Turn:
 
 @dataclass
 class Thread:
-    """One topic of the day's discussion: opened by one line, argued over for a few turns, then closed.
-    Only one thread is open at a time; a closed one lives on as its summary line."""
+    """The day's discussion: one thread about the killing, from the first line to the last."""
     day: int
     opener: str
     topic: str = ""
     turns: list[Turn] = field(default_factory=list)
     owed: str | None = None  # who was asked or accused and hasn't spoken since
     passes_in_a_row: int = 0
-    passed: set = field(default_factory=set)  # who passed; they aren't asked again in this thread
+    passed: set = field(default_factory=set)  # who passed since the last spoken line
     player_prompted: bool = False  # the Player gets one forced answer per thread
-    overtime: bool = False  # one extra turn past the caps, so a last question still gets its answer
+    overtime: bool = False  # one extra turn past the budget, so a last question still gets its answer
     ended: str = ""  # why it closed: "turns", "passes", "no one left", "budget"
 
     def add(self, turn: Turn):
-        """Adds a spoken line and updates who owes an answer."""
+        """Adds a spoken line and updates who owes an answer. Passes only hold for the exchange they were
+        made in, so a spoken line clears them."""
         self.passes_in_a_row = 0
+        self.passed = set()
         self.turns.append(turn)
         if turn.speaker == self.owed:
             self.owed = None

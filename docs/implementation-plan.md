@@ -29,6 +29,7 @@ Target design: [`game-loop.md`](game-loop.md). Each milestone leaves the game pl
 | 19 | A day keeps its length: the budget is spoken lines (`turns_per_day`), not a number of threads. |
 | 20 | Validate the thread model before adding to it: changing topic mid-thread (`/new`) waits until then. |
 | 21 | Thread markers (topic and how it ended) are a debug flag, `debug.show_threads`. |
+| 22 | The day is **one conversation about the killing**: every prompt leads with the day's question and the last two lines; when it runs dry, someone moves it to a new angle of the killing (supersedes 18). |
 
 ## Ground rules
 

@@ -149,12 +149,8 @@ class IOHandler:
     # Structured prompt methods
     # ------------------------------------------------------------------
 
-    def prompt_open_topic(self) -> str:
-        """Between topics: the player may raise one (or Enter to listen)."""
-        return self.prompt("[Press Enter to listen, or type to raise a new topic] > ")
-
     def prompt_join(self) -> str:
-        """During a topic: the player may join in (or Enter to let it go on)."""
+        """During the discussion: the player may speak (or Enter to let it go on)."""
         return self.prompt("[Press Enter to continue, or type to join in] > ")
 
     def prompt_reaction(self, speaker: str) -> str:

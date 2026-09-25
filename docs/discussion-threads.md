@@ -1,5 +1,7 @@
 # Plan: discussion threads
 
+> **Revised:** the day is now a single conversation about the killing. See [Revision: one conversation a day](#revision-one-conversation-a-day-2026-09-25) at the end; the multi-thread design below is kept for the record.
+
 Replaces the assertion → reaction chain in the discussion phase with **threads**: one topic at a time,
 with the engine deciding who holds the floor. Current flow: [`game-loop.md`](game-loop.md#discussion-loop-current-implementation).
 
@@ -235,3 +237,36 @@ Found and fixed during validation:
 
 Still open, for after this change settles: changing topic mid-thread (`/new`, decision 3), and the characters'
 fondness for "plain" / "plainly" (a third of all lines, in both flows; it's their voice, not the flow).
+
+## Revision: one conversation a day (2026-09-25)
+
+Playing the multi-thread version still felt scattered: a day hopped between four or five topics. The day is now
+**one conversation about the killing** (decision 22):
+
+- **Today's question** leads every turn prompt: who killed the victim, where they were found and the traces
+  beside the body, or after a quiet night, who was spared and why. The morning reports are part of it.
+- **JUST SAID:** the last two lines, verbatim, with "respond to this". Older lines of the day come compacted
+  (the last 10, trimmed), for reference only. Every line must be about today's question.
+- **Roles:** ANSWER (whoever was asked or accused), JOIN (someone with a stake in the last two lines; may pass),
+  and LEAD: the first line of the day, or, after two passes or when nobody has a stake, a new angle *of the
+  killing* that links to what was just said. There are no topic switches, and no turn cap per topic.
+- Nobody speaks more than 2 of the last 6 lines (answers excepted): `speaker_window` and `max_in_window` replace
+  the per-thread caps. Role claims are spoken into the conversation (checked every 4 lines).
+- `debug.show_threads` shows the day's question and marks each new angle.
+
+Measured on live games (seeds 71-74, `--spare-player`), with the judge also rating each day as a whole:
+structure 1-5 (5 = one line of inquiry followed through), and how many subjects it jumps between.
+
+| Metric | Assertions + reactions | Threads (topics) | **One conversation** |
+|---|---|---|---|
+| Structure, 1-5 (judge, per day) | 4.1 | 3.2 | **3.8** |
+| Subjects per day (judge) | 2.9 | 4.9 | **3.9** |
+| Pile-ons (judge) | 46% | 12% | **12%** |
+| Replies that wander off (judge) | 3.6% | 3.9% | **1.6%** |
+| Questions and accusations answered within 2 lines (engine record) | n/a | 96% | **94%** |
+| The Player's direct questions answered next | n/a | 17 of 18 | **25 of 27** |
+| Spoken lines per day (villagers) | 18.9 | 19.1 | 17.6 |
+
+The old flow's high structure score came from piling on: nearly half its lines repeated someone's demand, so a
+day rarely moved at all. One conversation keeps the pile-ons down and follows one line of inquiry better than
+separate topics did.

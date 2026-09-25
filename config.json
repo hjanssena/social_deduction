@@ -6,10 +6,10 @@
         "coroner_count": 1
     },
     "discussion": {
-        "_docs": "Controls the discussion phase: one thread (topic) at a time, see docs/discussion-threads.md. turns_per_day: spoken lines per day across all threads (passes are free). max_turns_per_thread: a thread closes after this many lines. max_turns_per_speaker: lines one character may speak in a thread, answers excepted. bystander_chance: when nobody has a stake in the exchange, the chance that an uninvolved villager joins in anyway. decay_factor: multiplier on a character's chance to open a topic each time they open one. chat_history_window: how many recent chat lines other prompts (aftermath) receive. max_aftermath_reactions: at most this many characters react to the verdict. player_min_actions: below this many actions in a day, the town notices the Player's silence (it goes on the public record). player_max_actions: above this, the town notices the Player's constant interruptions.",
+        "_docs": "Controls the discussion phase: one conversation a day about last night's killing, see docs/discussion-threads.md. turns_per_day: spoken lines per day (passes are free). speaker_window, max_in_window: nobody speaks more than max_in_window of the last speaker_window lines, answers excepted. bystander_chance: when nobody has a stake in the last lines, the chance that an uninvolved villager responds anyway (otherwise someone moves the discussion on to a new angle). decay_factor: multiplier on a character's chance to move the discussion on, each time they do. chat_history_window: how many recent chat lines other prompts (aftermath) receive. max_aftermath_reactions: at most this many characters react to the verdict. player_min_actions: below this many actions in a day, the town notices the Player's silence (it goes on the public record). player_max_actions: above this, the town notices the Player's constant interruptions.",
         "turns_per_day": 24,
-        "max_turns_per_thread": 6,
-        "max_turns_per_speaker": 2,
+        "speaker_window": 6,
+        "max_in_window": 2,
         "bystander_chance": 0.3,
         "decay_factor": 0.2,
         "chat_history_window": 8,
@@ -108,7 +108,7 @@
         "memory_sentences": 6
     },
     "debug": {
-        "_docs": "Debug display toggles. show_logic: print each character's decision (intent, target, emotion, private thought) in gray. dump_logbooks: write every logbook to logs/<game>/<name>.md after each phase. show_threads: mark where each discussion thread (topic) opens and how it closed.",
+        "_docs": "Debug display toggles. show_logic: print each character's decision (intent, target, emotion, private thought) in gray. dump_logbooks: write every logbook to logs/<game>/<name>.md after each phase. show_threads: show the day's question at the start of the discussion and mark each new angle someone brings up.",
         "show_logic": false,
         "dump_logbooks": false,
         "show_threads": false

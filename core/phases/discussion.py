@@ -11,22 +11,27 @@ ROLE_LABELS = {"guardian_angel": "Guardian Angel", "coroner": "Coroner"}
 
 
 class DiscussionPhase:
-    """The day's discussion, one thread (topic) at a time; see docs/discussion-threads.md.
+    """The day's discussion: one conversation about last night's killing (see docs/discussion-threads.md).
 
-    Each thread opens with a role claim, the Player's line or an NPC raising a topic. The director
-    (core/discussion_director.py) then picks every speaker: whoever was asked or accused answers first,
-    then people with a stake may join in or pass. The Player may join in at every turn.
+    The director (core/discussion_director.py) picks every speaker: whoever was asked or accused answers
+    first, then people with a stake in the last lines respond or pass, and when the exchange runs dry
+    someone moves it on to another angle of the killing. Role claims are spoken into the same conversation.
+    The Player may speak at every turn. Every prompt leads with the day's question and the last two lines.
 
     The next NPC line is generated in the background while the player reads the current one; typing
     discards it.
     """
 
+    REVEAL_CHECK_EVERY = 4  # lines between checks for a due role claim
+
     def __init__(self, gm):
         self.gm = gm
-        self.earlier = []  # EARLIER TODAY: morning reports and one summary line per closed thread
-        self.pending_reveals = []  # role claims waiting to open a thread
+        self.reports = []  # this morning's reports from role claimants, part of the day's question
+        self.theme = ""
         self.prefetcher = None
         self.prefetched = None  # (name, role) of the turn being generated in the background
+        self.pending_reveals = []  # role claims waiting for their moment
+        self.angles = 0
 
     def run(self):
         gm = self.gm
@@ -50,14 +55,14 @@ class DiscussionPhase:
         io.show_primer(primer)
         state.chat_history.append(f"[Town Crier]: {primer}")
 
+        self.theme = gm.get_day_theme(self.reports)
+        thread = Thread(day=state.day, opener="", topic=self.theme.split("?")[0] + "?")
+        state.threads[state.day] = [thread]
+        if gm.debug.get("show_threads"):
+            io.show_system(f"— today: {thread.topic} —", style="muted")
+
         director = DiscussionDirector(gm)
-        threads = state.threads.setdefault(state.day, [])
-        while director.budget_left():
-            thread = self._open_thread(director)
-            if thread is None:
-                break
-            threads.append(thread)
-            self._run_thread(thread, director)
+        self._discuss(thread, director)
 
         self.prefetcher.shutdown()
         self._apply_silence_penalty()
@@ -67,119 +72,89 @@ class DiscussionPhase:
         state.phase = GamePhase.VOTING
 
     # ------------------------------------------------------------------
-    # Threads
+    # The conversation
     # ------------------------------------------------------------------
 
-    def _open_thread(self, director) -> Thread | None:
-        """A pending role claim opens the thread, else the Player's line if they type, else an NPC."""
+    def _discuss(self, thread: Thread, director):
         gm = self.gm
         io = gm.io
-        state = gm.state
-
-        self.pending_reveals.extend(gm.stat_engine.check_all_reveals())
-        while self.pending_reveals:
-            name, engine_result = self.pending_reveals.pop(0)
-            if name not in state.alive_characters:
+        since_check = self.REVEAL_CHECK_EVERY  # check for claims before the first line too
+        leads_tried = []
+        while not director.day_over(thread):
+            if since_check >= self.REVEAL_CHECK_EVERY:
+                since_check = 0
+                self.pending_reveals.extend(gm.stat_engine.check_all_reveals())
+            if self.pending_reveals and self._claim(thread, director):
+                since_check += 1
                 continue
-            self._discard_prefetch()
-            data = gm.npc_controller.generate_reveal(name, engine_result)
-            if not data:
-                continue
-            label = ROLE_LABELS.get(data.get("claimed_role", ""), data.get("claimed_role", ""))
-            thread = Thread(day=state.day, opener=name, topic=f"a claim to be the {label}")
-            self._show_thread_opening(thread, len(state.threads.get(state.day, [])) + 1)
-            self._commit_line(name, data)
-            self._display_opening(name, data)
-            self._add_turn(thread, director, name, data)
-            return thread
-
-        p_input = io.prompt_open_topic()
-        if p_input.strip():
-            self._discard_prefetch()
-            parsed = gm.player_controller.process_assertion(p_input)
-            said = " ".join(p_input.split())
-            thread = Thread(day=state.day, opener="Player",
-                            topic=f'"{said[:70]}{"..." if len(said) > 70 else ""}"')
-            self._show_thread_opening(thread, len(state.threads.get(state.day, [])) + 1)
-            self._add_turn(thread, director, "Player", {"intent": parsed.get("intent", "neutral"),
-                                                        "target": parsed.get("target", "None"),
-                                                        "dialogue": p_input})
-            return thread
-
-        name, data = self._take_prefetched("open")
-        tried = [name] if name else []
-        while data is None and len(tried) < 3:  # an opener with nothing to say leaves the floor to another
-            name = director.pick_opener(exclude=tuple(tried))
-            if name is None:
-                return None
-            tried.append(name)
-            data = gm.npc_controller.take_turn(name, "open", None, list(self.earlier), self._last_topic())
-        if data is None:
-            return None
-        director.opened(name)
-        thread = Thread(day=state.day, opener=name, topic=data.get("topic", ""))
-        self._show_thread_opening(thread, len(state.threads.get(state.day, [])) + 1)
-        self._commit_line(name, data)
-        self._display_opening(name, data)
-        self._add_turn(thread, director, name, data)
-        return thread
-
-    def _run_thread(self, thread: Thread, director):
-        gm = self.gm
-        io = gm.io
-        while True:
-            reason = director.close_reason(thread)
-            if reason:
-                thread.close(reason)
-                break
 
             name, role = director.next_speaker(thread)
+            if role == "lead" and name in leads_tried:
+                name = director.pick_lead(exclude=tuple(leads_tried + [thread.last.speaker if thread.last else ""]))
             if name is not None and name != "Player":
                 self._prefetch(name, role, thread)
 
-            # The Player may join in at every turn
             p_input = io.prompt_join()
             if p_input.strip():
                 self._discard_prefetch()
                 self._player_turn(thread, director, p_input)
+                since_check += 1
                 continue
-
             if name is None:
-                thread.close("no one left")
                 break
             if name == "Player":
                 self._forced_player_answer(thread, director)
                 continue
 
-            data = self._take_prefetched(role, name)[1] or gm.npc_controller.take_turn(
-                name, role, thread, list(self.earlier))
+            ready, data = self._take_prefetched(role, name)
+            if not ready:
+                data = gm.npc_controller.take_turn(name, role, thread, self.theme)
             if data is None:
-                thread.add_pass(name)
+                if role == "lead":
+                    leads_tried.append(name)  # nothing to say: someone else moves it on
+                    if len(leads_tried) >= 3:
+                        break
+                else:
+                    thread.add_pass(name)
+                continue
+            leads_tried = []
+            if role == "lead":
+                director.led(name)
+                self._show_angle(data)
+            self._commit_line(name, data)
+            if thread.last is None:
+                self._display_opening(name, data)
+            else:
+                self._display_turn(name, data)
+            self._add_turn(thread, director, name, data)
+            since_check += 1
+
+    def _claim(self, thread: Thread, director) -> bool:
+        """Speaks the next due role claim into the conversation. False if none could be made."""
+        gm = self.gm
+        while self.pending_reveals:
+            name, engine_result = self.pending_reveals.pop(0)
+            if name not in gm.state.alive_characters:
+                continue
+            self._discard_prefetch()
+            data = gm.npc_controller.generate_reveal(name, engine_result)
+            if not data:
                 continue
             self._commit_line(name, data)
-            self._display_turn(name, data)
+            self._display_opening(name, data)
             self._add_turn(thread, director, name, data)
-
-        self.earlier.append(thread.summary())
-        if gm.debug.get("show_threads"):
-            io.show_system(f"— closed ({thread.ended}): {thread.summary()} —", style="muted")
-
-        # Prepare the next opener while the player reads, unless a claim will open the next thread
-        self.pending_reveals.extend(gm.stat_engine.check_all_reveals())
-        if not self.pending_reveals and director.budget_left():
-            opener = director.pick_opener()
-            if opener:
-                self._prefetch(opener, "open", None)
+            return True
+        return False
 
     def _add_turn(self, thread: Thread, director, name: str, data: dict):
         thread.add(Turn(name, data.get("intent", "neutral"), data.get("target", "None"), data.get("dialogue", "")))
         director.count_turn()
 
     def _player_turn(self, thread: Thread, director, text: str):
-        """The Player joins the current thread; if they ask or accuse someone, that person answers next."""
+        """The Player speaks into the conversation; if they ask or accuse someone, that person answers next."""
         gm = self.gm
         last = thread.last
-        chain = [{"speaker": t.speaker, "dialogue": t.dialogue, "intent": t.intent} for t in thread.turns]
+        chain = [{"speaker": t.speaker, "dialogue": t.dialogue, "intent": t.intent} for t in thread.turns[-3:]]
         parsed = gm.player_controller.process_reaction(
             text, last.speaker if last else "Room", last.dialogue if last else "", chain)
         target = parsed.get("target", "None")
@@ -188,7 +163,8 @@ class DiscussionPhase:
                                                     "target": target, "dialogue": text})
 
     def _forced_player_answer(self, thread: Thread, director):
-        """The Player was asked or accused: one chance per thread to answer, and silence is noticed."""
+        """The Player was asked or accused: one chance to answer, and silence is noticed. After that,
+        the Player isn't pressed again until someone else asks them something."""
         gm = self.gm
         io = gm.io
         thread.player_prompted = True
@@ -196,39 +172,34 @@ class DiscussionPhase:
         text = io.prompt_reaction_forced(asker)
         if text.strip():
             self._player_turn(thread, director, text)
+            thread.player_prompted = False
             return
         thread.owed = None
         io.show_system("You refused to defend yourself against a direct claim. The town notices your guilt...",
                        style="error")
         gm.record_action("Player", "silent", asker, note=f"said nothing at all when {asker} pressed them")
+        thread.player_prompted = False
 
-    def _show_thread_opening(self, thread: Thread, number: int):
-        if self.gm.debug.get("show_threads"):
-            self.gm.io.show_system(f"— thread {number}: {thread.topic or 'a new topic'} —", style="muted")
+    def _show_angle(self, data: dict):
+        self.angles += 1
+        if self.gm.debug.get("show_threads") and data.get("topic"):
+            self.gm.io.show_system(f"— angle {self.angles}: {data['topic']} —", style="muted")
 
     # --- background generation ------------------------------------------------
 
-    def _prefetch(self, name: str, role: str, thread: Thread | None):
-        snapshot = copy.deepcopy(thread) if thread is not None else None
+    def _prefetch(self, name: str, role: str, thread: Thread):
         self.prefetched = (name, role)
-        self.prefetcher.submit(self.gm.npc_controller.take_turn, name, role, snapshot, list(self.earlier),
-                               self._last_topic() if role == "open" else "")
+        self.prefetcher.submit(self.gm.npc_controller.take_turn, name, role, copy.deepcopy(thread), self.theme)
 
-    def _last_topic(self) -> str:
-        threads = self.gm.state.threads.get(self.gm.state.day, [])
-        closed = [t for t in threads if not t.is_open]
-        return closed[-1].summary() if closed else ""
-
-    def _take_prefetched(self, role: str, name: str = None):
-        """(name, data) of the prefetched turn if it matches, else (None, None)."""
-        if self.prefetched and self.prefetched[1] == role and (name is None or self.prefetched[0] == name) \
-                and self.prefetcher.has_pending():
-            who = self.prefetched[0]
+    def _take_prefetched(self, role: str, name: str) -> tuple[bool, dict | None]:
+        """(True, turn) if the prefetched turn is for this speaker and role (the turn is None for a pass),
+        else (False, None)."""
+        if self.prefetched == (name, role) and self.prefetcher.has_pending():
             self.prefetched = None
             data, _ = self.prefetcher.get()
-            return who, data
+            return True, data
         self._discard_prefetch()
-        return None, None
+        return False, None
 
     def _discard_prefetch(self):
         self.prefetcher.invalidate()
@@ -365,7 +336,7 @@ class DiscussionPhase:
                 label = ROLE_LABELS.get(claimed_role, claimed_role)
                 io.show_report(name, label, report)
                 state.chat_history.append(f"[{name} ({label} Report)]: {report}")
-                self.earlier.append(f"{name}, who claims to be the {label}, reported: {report}")
+                self.reports.append(f"{name} (who claims to be the {label}): {report}")
                 state.logical_history.append(
                     f"{name} [morning_report] -> Room. Role: {label}."
                 )
