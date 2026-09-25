@@ -260,11 +260,14 @@ class NPCController:
         return result
 
     def _repeated_line(self, name: str, dialogue: str) -> str | None:
-        """Returns the earlier line of this character's that `dialogue` nearly repeats, if any."""
+        """Returns the earlier line of this character's (or one of their example lines, which are
+        style references only) that `dialogue` nearly repeats, if any."""
         if not dialogue:
             return None
         own = [r["dialogue"] for r in self.gm.state.public_record if r["speaker"] == name and r.get("dialogue")]
-        for line in own[-5:]:
+        examples = [line for per_intent in self.gm.characters[name].speech_examples.values()
+                    if isinstance(per_intent, dict) for line in per_intent.values() if "{target}" not in line]
+        for line in own[-5:] + examples:
             if SequenceMatcher(None, dialogue.lower(), line.lower()).ratio() >= 0.7:
                 return line
         return None

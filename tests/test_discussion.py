@@ -89,3 +89,11 @@ def test_sanitize_target_matching(gm):
     assert gm.sanitize_target(names[0].upper()) == names[0]
     assert gm.sanitize_target(f"{names[1]} the fool") == names[1]
     assert gm.sanitize_target("nobody") == "None"
+
+
+def test_repeat_guard_catches_copied_example_lines(gm, llm):
+    speaker = npc_names(gm)[0]
+    examples = gm.characters[speaker].speech_examples.get("neutral", {})
+    example = next(v for v in examples.values() if "{target}" not in v)
+    llm.json_answers = [{"intent": "neutral", "dialogue": example}, {"intent": "neutral", "dialogue": "Fresh words."}]
+    assert gm.npc_controller.generate_assertion(speaker, 0)["dialogue"] == "Fresh words."
