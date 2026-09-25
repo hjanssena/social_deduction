@@ -2,6 +2,7 @@ import os
 import re
 from datetime import datetime
 
+from core.controllers.conversation_controller import ConversationController
 from core.controllers.npc_controller import NPCController
 from core.controllers.player_controller import PlayerController
 from core.game_state import GameState, GamePhase, WIN_MESSAGES
@@ -32,6 +33,7 @@ class GameMaster:
         self.stat_engine = StatEngine(self.state, self.characters, config.get("engine", {}))
         self.player_controller = PlayerController(self)
         self.npc_controller = NPCController(self)
+        self.conversation_controller = ConversationController(self)
 
         # Phase handlers
         self.phases = {

@@ -176,6 +176,11 @@ class IOHandler:
             except ValueError:
                 self.display("\033[91mPlease enter a number.\033[0m")
 
+    def prompt_say(self, listener: str, remaining: int = None) -> str:
+        """Prompt the player to say something to one villager (or Enter to stay silent)."""
+        left = f", {remaining} left" if remaining is not None else ""
+        return self.prompt(self.paint(f"[Say something to {listener}{left}, or press Enter to stay silent] > "))
+
     def prompt_final_words(self) -> str:
         """Prompt the condemned player for their last words."""
         return self.prompt("\033[93m[Speak your final words] >\033[0m ")
