@@ -27,9 +27,9 @@ class DiscussionPhase:
         io.show_phase("DISCUSSION", state.day)
 
         # Condense previous day's history + morning reports
-        if state.day > 0:
+        if state.chat_history:
             gm.condense_day_history()
-            self._morning_reports()
+        self._morning_reports()
 
         # Discussion primer — sets the tone and reminds characters of the stakes
         primer = self._build_day_primer()
@@ -368,31 +368,13 @@ class DiscussionPhase:
         """Builds a context-setting message for the start of each day's discussion."""
         state = self.gm.state
         alive_count = len(state.alive_characters)
-        wolf_warning = "There are werewolves among us. We must find them and vote to lynch them before nightfall, or more will die."
-
-        if state.day == 0:
-            return (
-                f"Townspeople! {state.main_topic} "
-                f"Word has spread that werewolves have infiltrated our village. "
-                f"{wolf_warning} "
-                f"Speak now: share what you know, ask your questions, and choose carefully whom to trust. {alive_count} souls remain."
-            )
-
-        # Day 1+: reference last night's events
-        killed = state.killed_last_night
-        if killed:
-            victims = ", ".join(killed)
-            return (
-                f"Last night, {victims} was found dead — torn apart by werewolves. "
-                f"{wolf_warning} "
-                f"{alive_count} souls remain. The town must vote today."
-            )
+        wolf_warning = "There are werewolves among us. We must find them and vote to hang them before nightfall, or more will die."
+        if state.killed_last_night:
+            opening = f"{', '.join(state.killed_last_night)} was found dead this morning, torn apart by werewolves."
         else:
-            return (
-                f"Miraculously, no one died last night. But the werewolves are still among us. "
-                f"{wolf_warning} "
-                f"{alive_count} souls remain."
-            )
+            opening = "Nobody died last night, but the werewolves are still among us."
+        first_day = " Speak now: share what you know, ask your questions, and choose carefully whom to trust." if state.day == 1 else ""
+        return f"Townspeople! {opening} {wolf_warning}{first_day} {alive_count} souls remain."
 
     # ------------------------------------------------------------------
     # Morning reports & silence penalty

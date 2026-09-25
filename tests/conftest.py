@@ -73,12 +73,14 @@ def io():
 
 
 @pytest.fixture
-def make_gm(config, llm, io):
+def make_gm(config, llm, io, tmp_path):
     """Builds a GameMaster with a fixed seed so roles and logbooks are reproducible."""
     def build(seed=5):
         random.seed(seed)
         chars = [Character(f"npc_{c['name'].lower()}", c) for c in RAW_CHARACTER_DATA]
-        return GameMaster(llm, PromptService(), chars, config, io=io)
+        gm = GameMaster(llm, PromptService(), chars, config, io=io)
+        gm.log_dir = str(tmp_path / "logs")
+        return gm
     return build
 
 

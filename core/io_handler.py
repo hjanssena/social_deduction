@@ -125,8 +125,18 @@ class IOHandler:
         self.display(self.say(speaker, text))
 
     def show_game_over(self, result: str, message: str = ""):
-        """Game over announcement."""
-        self.display(message)
+        """Game over announcement. A message starting with [VICTORY] is green, anything else red."""
+        color = "\033[92m" if message.startswith("[VICTORY]") else self.RED
+        self.display("\n" + self.paint(message, color))
+
+    def show_final_roles(self, roles: dict, alive: list[str]):
+        """Every character's true role, revealed at the end of the game."""
+        labels = {"werewolf": "Werewolf", "guardian_angel": "Guardian Angel",
+                  "coroner": "Coroner", "villager": "Villager"}
+        self.display(self.paint("\nThe truth, at last:", self.YELLOW))
+        for name, role in roles.items():
+            status = "" if name in alive else " (dead)"
+            self.display(f"  {self.paint(name)}{status}: {labels.get(role, role)}")
 
     def show_role_reveal_private(self, role: str, details: list[str] = None):
         """Reveal the player's secret role."""

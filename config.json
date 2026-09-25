@@ -78,7 +78,7 @@
         "history_window": 3,
         "_docs_history_window": "How many recent logical_history entries to scan when checking if someone is under attack.",
         "reveal": {
-            "_docs": "Controls role reveal decisions. Checked for ALL alive NPCs between every assertion round (not gated by speaker bids), so probabilities are per-round. pressure_base_chance: per-round probability for a real role holder to counter-reveal when someone claims their role. pressure_ad_divisor: assertion_drive/this is added to the base chance. wolf_pressure_performance_threshold: minimum performance for a wolf to consider counter-claiming under pressure. wolf_pressure_chance_divisor: performance/this = per-round wolf counter-claim probability. ga_voluntary_chance: per-round probability the GA reveals voluntarily when under attack and has protection history. coroner_wolf_finding_chance: per-round probability the coroner reveals when they have werewolf findings. coroner_no_wolf_chance: per-round probability the coroner reveals when they only have non-wolf findings. coroner_under_attack_bonus: added to reveal chance when the coroner is being accused.",
+            "_docs": "Controls role reveal decisions. Checked for ALL alive NPCs between every assertion round (not gated by speaker bids), so probabilities are per-round. pressure_base_chance: per-round probability for a real role holder to counter-reveal when someone claims their role. pressure_ad_divisor: assertion_drive/this is added to the base chance. wolf_pressure_performance_threshold: minimum performance for a wolf to consider counter-claiming under pressure. wolf_pressure_chance_divisor: performance/this = per-round wolf counter-claim probability. ga_voluntary_chance: per-round probability the GA reveals voluntarily when under attack and has protection history. coroner_wolf_finding_chance: per-round probability the coroner reveals when they have werewolf findings. coroner_no_wolf_chance: per-round probability the coroner reveals when they only have non-wolf findings. coroner_under_attack_bonus: added to reveal chance when the coroner is being accused. ga_after_save_chance: chance the Guardian Angel claims the role the morning after a successful save, even when nobody accuses them. wolf_fake_save_chance: chance a wolf fake-claims Guardian Angel after a quiet night, naming the person the pack really attacked.",
             "pressure_base_chance": 0.8,
             "pressure_ad_divisor": 150,
             "wolf_pressure_performance_threshold": 6,
@@ -86,11 +86,13 @@
             "ga_voluntary_chance": 0.2,
             "coroner_wolf_finding_chance": 0.4,
             "coroner_no_wolf_chance": 0.15,
-            "coroner_under_attack_bonus": 0.3
+            "coroner_under_attack_bonus": 0.3,
+            "ga_after_save_chance": 0.7,
+            "wolf_fake_save_chance": 0.3
         }
     },
     "logbook": {
-        "_docs": "Private per-character logbooks. friends_count / enemies_count: [min, max] random starting friends / enemies per NPC, drawn from the other NPCs (the Player always starts as a stranger). max_entries_in_prompt: how many of the most recent entries are included in each prompt.",
+        "_docs": "Private per-character logbooks. friends_count / enemies_count: [min, max] random starting friends / enemies per NPC, drawn from the other NPCs (the Player always starts as a stranger). mutual_friend_chance / mutual_enemy_chance: how likely a friendship or enmity is returned. max_entries_in_prompt: how many of the most recent entries are included in each prompt.",
         "friends_count": [
             1,
             2
@@ -99,7 +101,9 @@
             1,
             1
         ],
-        "max_entries_in_prompt": 12
+        "max_entries_in_prompt": 12,
+        "mutual_friend_chance": 0.7,
+        "mutual_enemy_chance": 0.5
     },
     "debug": {
         "_docs": "Debug display toggles. show_logic: print each character's decision (intent, target, emotion, private thought) in gray. dump_logbooks: write every logbook to logs/<game>/<name>.md after each phase.",

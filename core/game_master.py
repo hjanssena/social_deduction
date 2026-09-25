@@ -4,11 +4,12 @@ from datetime import datetime
 
 from core.controllers.npc_controller import NPCController
 from core.controllers.player_controller import PlayerController
-from core.game_state import GameState, GamePhase
+from core.game_state import GameState, GamePhase, WIN_MESSAGES
 from core.stat_engine import StatEngine
 from core.colors import assign_colors
 from core.io_handler import IOHandler
-from core.phases import ProloguePhase, DiscussionPhase, VotingPhase, NightPhase
+from core.phases import (ArrivalPhase, NightPhase, MorningPhase, DiscussionPhase, VotingPhase,
+                         AftermathPhase, ChatsPhase)
 
 
 class GameMaster:
@@ -32,10 +33,13 @@ class GameMaster:
 
         # Phase handlers
         self.phases = {
-            GamePhase.PROLOGUE: ProloguePhase(self),
+            GamePhase.ARRIVAL: ArrivalPhase(self),
+            GamePhase.NIGHT: NightPhase(self),
+            GamePhase.MORNING: MorningPhase(self),
             GamePhase.DISCUSSION: DiscussionPhase(self),
             GamePhase.VOTING: VotingPhase(self),
-            GamePhase.NIGHT: NightPhase(self),
+            GamePhase.AFTERMATH: AftermathPhase(self),
+            GamePhase.CHATS: ChatsPhase(self),
         }
 
     def run_loop(self):
@@ -51,6 +55,24 @@ class GameMaster:
                 self.io.show_system(f"Phase {self.state.phase} not implemented yet.", style="error")
                 break
 
+    def end_game(self, result: str):
+        """Ends the game: the outcome from the Player's side, every role revealed, logbooks saved.
+        result: village_wins | werewolves_win | player_killed | player_lynched."""
+        state = self.state
+        state.phase = GamePhase.GAME_OVER
+        state.game_result = result
+        player_is_wolf = state.roles.get("Player") == "werewolf"
+        if result in ("player_killed", "player_lynched"):
+            headline = ("[DEFEAT] You were murdered by the werewolves in your sleep." if result == "player_killed"
+                        else "[DEFEAT] The town has hanged you.")
+        else:
+            won = (result == "werewolves_win") == player_is_wolf
+            headline = ("[VICTORY] " if won else "[DEFEAT] ") + WIN_MESSAGES[result]
+        self.io.show_game_over(result, headline)
+        self.io.show_final_roles(state.roles, state.alive_characters)
+        self.dump_logbooks(force=True)
+        self.io.show_system(f"Every character's logbook is saved in {self.log_dir}/", style="info")
+
     # --- Logbooks ---
 
     def get_logbook_text(self, name: str) -> str:
@@ -61,9 +83,9 @@ class GameMaster:
         max_entries = self.logbook_config.get("max_entries_in_prompt", 12)
         return book.render(alive=self.state.alive_characters, max_entries=max_entries)
 
-    def dump_logbooks(self):
-        """Writes every logbook to logs/<game>/<name>.md when debug.dump_logbooks is on."""
-        if not self.debug.get("dump_logbooks"):
+    def dump_logbooks(self, force: bool = False):
+        """Writes every logbook to logs/<game>/<name>.md when debug.dump_logbooks is on (or forced)."""
+        if not (force or self.debug.get("dump_logbooks")):
             return
         os.makedirs(self.log_dir, exist_ok=True)
         for name, book in self.state.logbooks.items():
@@ -203,46 +225,20 @@ class GameMaster:
         # If condensation fails, keep the raw history (better than losing it)
 
     def get_game_context(self) -> str:
-        """Builds a situational summary explaining the werewolf game stakes for the current day."""
+        """Builds a situational summary: the stakes, what the village woke up to, the last verdict."""
         state = self.state
-        day = state.day
-
-        if day == 0:
-            return (
-                f"This is a social deduction game set in a small village. "
-                f"Werewolves have secretly infiltrated the group. "
-                f"During the day, villagers discuss suspicions and vote to lynch one person. "
-                f"At night, werewolves kill a villager. "
-                f"Today is Day 0. {state.main_topic} "
-                f"Tensions are rising as rumors of werewolves spread."
-            )
-
-        # Day 1+: reference what happened
         lines = [
-            "This is a social deduction game. Werewolves hide among villagers. "
-            "Each day the town votes to lynch a suspect. Each night the wolves kill someone."
+            "Werewolves hide among the villagers. Each day the town talks and votes to hang a suspect; "
+            "each night the wolves kill someone.",
+            state.morning_event,
         ]
-
-        # Summarize deaths
-        killed = state.killed_last_night
-        if killed:
-            lines.append(f"Last night, {', '.join(killed)} was killed by werewolves.")
-        else:
-            lines.append("Miraculously, no one died last night.")
-
-        # Mention lynches and who voted for whom from public_events
-        lynch_events = [e for e in state.public_events if "lynched" in e.lower()]
-        if lynch_events:
-            lines.append(lynch_events[-1])
-        vote_events = [e for e in state.public_events if e.startswith(f"Day {day - 1} votes:")]
-        if vote_events:
-            lines.append(vote_events[-1])
-
-        lines.append(
-            f"It is now Day {day}. {len(state.alive_characters)} people remain alive. "
-            f"The town must find and eliminate the werewolves before they are outnumbered."
-        )
-
+        if state.day > 0:
+            if state.last_verdict and state.last_verdict["day"] == state.day - 1:
+                lines.append(f"Yesterday: {state.last_verdict['text']}")
+            vote_events = [e for e in state.public_events if e.startswith(f"Day {state.day - 1} votes:")]
+            if vote_events:
+                lines.append(vote_events[-1])
+            lines.append(f"It is now Day {state.day}. {len(state.alive_characters)} people remain alive.")
         return " ".join(lines)
 
     def sanitize_target(self, target: str) -> str:

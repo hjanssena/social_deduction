@@ -17,6 +17,14 @@ class StatEngine:
         self.c_wolf = cfg.get("werewolf", {})
         self.c_reveal = cfg.get("reveal", {})
         self.c_history_window = cfg.get("history_window", 3)
+        self._rolled = set()  # Keys of once-per-day chances that were already rolled
+
+    def _first_roll(self, *key) -> bool:
+        """True the first time `key` is seen: turns a per-round check into a single roll."""
+        if key in self._rolled:
+            return False
+        self._rolled.add(key)
+        return True
 
     # ================================================================
     # VOTES & NIGHT ACTIONS
@@ -336,7 +344,16 @@ class StatEngine:
         return None
 
     def _wolf_voluntary_reveal(self, name: str) -> dict | None:
-        """High-performance wolf proactively fake-claims a role when under pressure."""
+        """After a quiet night the pack may fake-claim the save (one roll per day for the whole pack).
+        Otherwise a high-performance wolf may fake-claim a role when under pressure."""
+        if (self.state.saved_last_night and not self.state.fake_claims_on(self.state.day)
+                and self._first_roll("wolf_fake_save", self.state.day)
+                and random.random() < self.c_reveal.get("wolf_fake_save_chance", 0.3)):
+            result = self._build_reveal_result(name, "guardian_angel",
+                                               self._fabricate_findings(name, "guardian_angel"), pressure=False)
+            result["_fake_claim"] = {"claimant": name, "claimed_role": "guardian_angel", "day": self.state.day}
+            return result
+
         char = self.characters.get(name)
         performance = char.performance if char else 5
         perf_threshold = self.c_wolf.get("voluntary_reveal_performance_threshold", 7)
@@ -363,7 +380,12 @@ class StatEngine:
 
     def _ga_voluntary_reveal(self, name: str) -> dict | None:
         """GA considers revealing voluntarily."""
-        # Reveal if: under heavy attack AND has protection history to share
+        # The morning after a save: one roll to claim it, even when nobody is accusing them
+        if (self.state.saved_last_night and self._first_roll("ga_save", name, self.state.day)
+                and random.random() < self.c_reveal.get("ga_after_save_chance", 0.7)):
+            return self._build_reveal_result(name, "guardian_angel", list(self.state.ga_protection_history))
+
+        # Otherwise reveal if: under heavy attack AND has protection history to share
         if not self.state.ga_protection_history:
             return None
         if not self._is_under_attack(name):
@@ -439,12 +461,16 @@ class StatEngine:
     def _fabricate_findings(self, wolf_name: str, fake_role: str) -> list[str]:
         """Werewolf invents plausible-sounding findings."""
         if fake_role == "guardian_angel":
-            # Claim to have protected someone random
+            if self.state.day <= 1:
+                return []  # Nobody protected anyone on night 0
+            night = f"Night {self.state.day - 1}"
+            # After a quiet night, claim the save of the person the pack really attacked
+            if self.state.saved_last_night and self.state.attacked_last_night:
+                return [f"{night}: Protected {self.state.attacked_last_night} "
+                        f"(nobody died, so I must have stopped the wolves)"]
+            # Otherwise someone alive (the dead can't have been protected)
             others = [n for n in self.state.alive_characters if n != wolf_name]
-            if others and self.state.day > 0:
-                target = random.choice(others)
-                return [f"Night {self.state.day - 1}: Protected {target}"]
-            return []
+            return [f"{night}: Protected {random.choice(others)}"] if others else []
         elif fake_role == "coroner":
             # Claim a lynched person was innocent (to cast doubt)
             pack = [n for n, r in self.state.roles.items() if r == "werewolf"]

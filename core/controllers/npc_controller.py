@@ -66,8 +66,7 @@ class NPCController:
             friends=book.friends,
             enemies=book.enemies,
             others_text=others_text,
-            situation=self.gm.state.main_topic,
-            pack=book.pack,
+            situation=self.gm.state.morning_event,
         )
         entry = self.gm.llm.generate_text(system, prompt)
         book.add_entry(self.gm.state.day, "Prologue", entry.strip().strip('"'))
@@ -91,7 +90,7 @@ class NPCController:
         state = self.gm.state
         role = state.roles.get(name, "villager")
         return self.gm.prompt_builder.build_system_prompt(
-            self.gm.characters[name], role,
+            self.gm.characters[name], role if state.roles_known else None,
             known_werewolves=[n for n, r in state.roles.items() if r == "werewolf" and n in state.alive_characters],
             coroner_knowledge=state.coroner_knowledge if role == "coroner" else None,
             ga_protection_history=state.ga_protection_history if role == "guardian_angel" else None,
@@ -256,6 +255,32 @@ class NPCController:
 
         result["primary_speaker"] = primary_speaker
         result["intensity"] = "high" if speaker_target == reactor_name else "medium"
+        return result
+
+    # ================================================================
+    # MORNING & AFTERMATH
+    # ================================================================
+
+    def build_crime_scene(self, victim: str) -> str:
+        """What the village finds in the morning. (Placeholder until the crime scene milestone.)"""
+        occupation = self.gm.characters[victim].occupation.lower() if victim in self.gm.characters else "traveler"
+        return f"{victim}, the {occupation}, was found dead this morning, torn apart by werewolves."
+
+    def react_to_verdict(self, name: str, verdict_text: str, chain: list) -> dict | None:
+        """A character's reaction once the vote is over. None when they stay silent."""
+        state = self.gm.state
+        votes = [e for e in state.public_events if e.startswith(f"Day {state.day} votes:")]
+        kwargs = self._context_kwargs(name)
+        prompt = self.gm.prompt_builder.build_aftermath_prompt(
+            verdict_text=verdict_text,
+            votes_text=votes[-1] if votes else "",
+            reaction_chain=list(chain),
+            stakes_text=self._stakes_text(name),
+            **kwargs,
+        )
+        result = self._decide(name, prompt, NPC_REACTION_INTENTS)
+        if result["intent"] == "silent" or not result["dialogue"]:
+            return None
         return result
 
     # ================================================================

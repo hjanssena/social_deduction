@@ -101,17 +101,12 @@ class PromptService:
 
     @staticmethod
     def build_logbook_seed_prompt(character, friends: list, enemies: list,
-                                   others_text: str, situation: str, pack: list = None) -> str:
+                                   others_text: str, situation: str) -> str:
         """Asks a character to write the opening entry of their private logbook."""
         prompt = f"Situation: {situation}\n\n"
         prompt += f"The other townsfolk:\n{others_text}\n\n"
         prompt += f"Your friends (people you like, trust and would stand up for): {', '.join(friends) or '(none)'}\n"
         prompt += f"Your enemies (people you dislike or distrust): {', '.join(enemies) or '(none)'}\n"
-        if pack:
-            prompt += (
-                f"SECRET: You are a werewolf, hiding among the townsfolk together with "
-                f"{', '.join(pack)}. Only your logbook knows this.\n"
-            )
         prompt += (
             "\nWrite the first entry of your private logbook. For each friend and enemy, "
             "invent a short history explaining why you feel that way about them, consistent "
@@ -138,11 +133,11 @@ class PromptService:
 
     @staticmethod
     def _day_guidance(day: int) -> str:
-        if day == 0:
+        if day <= 1:
             return (
-                "It is Day 0. Nobody has died yet and there is no hard evidence, only a disappearance "
-                "and rumors. Probe people, voice worries and watch how others react; accuse only if "
-                "something said today gives you real cause."
+                "It is the first day after the killing. There is a body and whatever it left behind, but "
+                "no hard evidence against anyone yet. Probe people, voice worries and watch how others "
+                "react; accuse only if something said or found gives you real cause."
             )
         return (
             "Weigh the evidence: who died, who was hanged and what they turned out to be, role claims, "
@@ -352,6 +347,35 @@ class PromptService:
             prompt += f"Voice: {character.speech_pattern}\n"
 
         prompt += "\nRespond with ONLY the words you say aloud, no quotes or labels.\n"
+        return prompt
+
+    @staticmethod
+    def build_aftermath_prompt(character, day: int, game_context: str, roster_text: str,
+                               claims_text: str, record_text: str, chat_history: list[str],
+                               verdict_text: str, votes_text: str, reaction_chain: list[dict],
+                               stakes_text: str = "", history_window: int = 8) -> str:
+        """The vote is over: the character reacts to the hanging, or to the town's indecision."""
+        prompt = PromptService._context_block(
+            game_context, roster_text, claims_text, record_text, chat_history, history_window)
+        prompt += f"THE VERDICT: {verdict_text}\n"
+        if votes_text:
+            prompt += f"{votes_text}\n"
+        for r in (reaction_chain or [])[-3:]:
+            prompt += f'{r["speaker"]} said: "{r["dialogue"]}"\n'
+        prompt += "\n"
+        if stakes_text:
+            prompt += f"WHAT CONCERNS YOU:\n{stakes_text}\n\n"
+        prompt += (
+            f"Decide whether {character.name} says something now that the vote is over. React the way "
+            "{name} would: grief or relief at the hanging, anger at whoever voted for whom, or frustration "
+            "that the town could not agree. Speak only if you care; otherwise stay silent.\n"
+            "Choose one action: accuse, question, defend_other, agree, disagree, defend_self, deflect, "
+            "neutral, or silent. Targets must be alive.\n\n"
+        ).replace("{name}", character.name)
+        prompt += DECISION_FORMAT.format(
+            intents=NPC_REACTION_INTENTS,
+            dialogue="one short sentence you say aloud, in your voice; empty if silent",
+        )
         return prompt
 
     # ================================================================

@@ -8,11 +8,11 @@ import random
 
 
 class Logbook:
-    def __init__(self, owner: str, friends: list[str], enemies: list[str], pack: list[str] = None):
+    def __init__(self, owner: str, friends: list[str], enemies: list[str]):
         self.owner = owner
         self.friends = list(friends)
         self.enemies = list(enemies)
-        self.pack = list(pack or [])  # Secret: fellow werewolves (werewolves only)
+        self.pack = []  # Secret: fellow werewolves, pinned as allies at night 0 (see assign_pack)
         self.entries = []  # [{"day": int, "phase": str, "text": str}]
 
     def relation_to(self, name: str) -> str | None:
@@ -23,14 +23,20 @@ class Logbook:
             return "enemy"
         return None
 
+    def assign_pack(self, pack: list[str]):
+        """Pins the owner's fellow werewolves as allies: they can never be enemies again."""
+        self.pack = [n for n in pack if n != self.owner]
+        self.enemies = [n for n in self.enemies if n not in self.pack]
+
     def add_entry(self, day: int, phase: str, text: str):
         text = (text or "").strip()
         if text:
             self.entries.append({"day": day, "phase": phase, "text": text})
 
     def set_allegiances(self, friends: list[str], enemies: list[str], valid_names: list[str]):
-        """Replaces the allegiance table with LLM-proposed lists, dropping unknown names."""
-        valid = set(valid_names) - {self.owner}
+        """Replaces the allegiance table with LLM-proposed lists, dropping unknown names.
+        Pinned packmates are never touched."""
+        valid = set(valid_names) - {self.owner} - set(self.pack)
         self.friends = [n for n in dict.fromkeys(friends) if n in valid]
         self.enemies = [n for n in dict.fromkeys(enemies) if n in valid and n not in self.friends]
 
@@ -43,7 +49,7 @@ class Logbook:
 
         lines = [f"Friends: {label(self.friends)}", f"Enemies: {label(self.enemies)}"]
         if self.pack:
-            lines.append(f"SECRET - fellow werewolves (never say this aloud): {label(self.pack)}")
+            lines.append(f"Allies, your werewolf pack (secret, never say this aloud): {label(self.pack)}")
 
         entries = self.entries[-max_entries:] if max_entries else self.entries
         if entries:
@@ -56,22 +62,34 @@ class Logbook:
         return f"# {self.owner}'s logbook\n\n" + self.render().replace("\n", "\n\n")
 
 
-def seed_logbooks(npc_names: list[str], roles: dict, config: dict) -> dict[str, Logbook]:
+def seed_logbooks(npc_names: list[str], config: dict) -> dict[str, Logbook]:
     """Gives every NPC a random set of friends and enemies among the other NPCs.
-    The Player is a stranger to everyone and never appears in the starting table."""
+    Relationships tend to go both ways (mutual_friend_chance / mutual_enemy_chance).
+    Roles play no part: packs are pinned later, at night 0. The Player starts as a stranger."""
     lo_f, hi_f = config.get("friends_count", [1, 2])
     lo_e, hi_e = config.get("enemies_count", [1, 1])
-    wolves = [n for n, r in roles.items() if r == "werewolf"]  # May include the Player
+    mutual_friend = config.get("mutual_friend_chance", 0.7)
+    mutual_enemy = config.get("mutual_enemy_chance", 0.5)
 
-    logbooks = {}
-    for name in npc_names:
-        others = [n for n in npc_names if n != name]
-        random.shuffle(others)
-        n_friends = min(random.randint(lo_f, hi_f), len(others))
-        friends = others[:n_friends]
-        pack = [w for w in wolves if w != name] if name in wolves else []
-        # Werewolves never start out hating their own packmates
-        remaining = [n for n in others[n_friends:] if n not in pack]
-        enemies = remaining[:min(random.randint(lo_e, hi_e), len(remaining))]
-        logbooks[name] = Logbook(name, friends, enemies, pack)
-    return logbooks
+    want_friends = {n: random.randint(lo_f, hi_f) for n in npc_names}
+    want_enemies = {n: random.randint(lo_e, hi_e) for n in npc_names}
+    friends = {n: [] for n in npc_names}
+    enemies = {n: [] for n in npc_names}
+
+    def known(a, b):
+        return b in friends[a] or b in enemies[a]
+
+    order = list(npc_names)
+    random.shuffle(order)
+    for name in order:
+        for table, want, mutual in ((friends, want_friends, mutual_friend), (enemies, want_enemies, mutual_enemy)):
+            candidates = [n for n in npc_names if n != name and not known(name, n)]
+            random.shuffle(candidates)
+            while len(table[name]) < want[name] and candidates:
+                other = candidates.pop()
+                table[name].append(other)
+                # Likely returned, if the other still has room and doesn't feel otherwise about them
+                if random.random() < mutual and len(table[other]) < want[other] and not known(other, name):
+                    table[other].append(name)
+
+    return {n: Logbook(n, friends[n], enemies[n]) for n in npc_names}

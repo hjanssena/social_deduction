@@ -4,20 +4,27 @@ from core.trust_manager import TrustManager
 from models.logbook import seed_logbooks
 
 WIN_MESSAGES = {
-    "village_wins": "\n\033[92m[VICTORY] All werewolves have been eliminated! The village is safe.\033[0m",
-    "werewolves_win": "\n\033[91m[DEFEAT] The werewolves now outnumber the villagers. The town falls to the beasts.\033[0m",
+    "village_wins": "All werewolves have been eliminated. The village is safe.",
+    "werewolves_win": "The werewolves now equal the villagers. The town falls to the beasts.",
 }
 
 class GamePhase(Enum):
-    PROLOGUE = 0
-    DISCUSSION = 1
-    VOTING = 2
-    NIGHT = 3
-    GAME_OVER = 4
+    ARRIVAL = 0
+    NIGHT = 1
+    MORNING = 2
+    DISCUSSION = 3
+    VOTING = 4
+    AFTERMATH = 5
+    CHATS = 6
+    GAME_OVER = 7
+
+
+PREMISE = ("A traveler arrives at a small, isolated village as night falls. "
+           "Folk whisper that something has been hunting in the woods.")
 
 class GameState:
     def __init__(self, characters: list, config: dict):
-        self.phase = GamePhase.PROLOGUE
+        self.phase = GamePhase.ARRIVAL
         self.day = 0
         self.chat_history = []
         self.logical_history = []
@@ -25,16 +32,20 @@ class GameState:
         self.public_record = []  # [{day, speaker, intent, target, note, dialogue}] — every public action, see GameMaster.record_action
         self.player_actions_today = 0
         self.killed_last_night = []
-        self.ga_protected_tonight = None
         self.ga_protected_last_night = None
-        self.ga_protection_history = []  # ["Night 0: Protected Elias", ...]
+        self.ga_protection_history = []  # ["Night 1: Protected Elias", ...]
+        self.attacked_last_night = None  # The wolves' target last night (known to the pack)
+        self.saved_last_night = None  # Set when the Guardian Angel protected that target
+        self.last_verdict = None  # {"day", "hanged": name or None, "text"} from the latest vote
         self.coroner_knowledge = []
         self.opinions = {}  # {viewer: {target: "short opinion"}} — computed at end of each day
         self.contradiction_log = {}  # {name: [(day, intent, target), ...]}
         self.fake_claims = []  # [{claimant: str, claimed_role: str, day: int}]
         self.revealed_roles = {}  # {name: claimed_role} — public claims (real or fake)
         self.reveal_pressure = {}  # {name: claimed_role} — set when someone claims your role
-        self.main_topic = "Victor's uncle has mysteriously disappeared. Someone in this room is responsible."
+        self.game_result = None  # Set by GameMaster.end_game
+        self.roles_known = False  # Characters learn their own role at night 0
+        self.morning_event = PREMISE  # What everyone woke up to: the premise, then each morning's news
 
         # Add the Player to the alive roster implicitly
         self.alive_characters = [c.name for c in characters] + ["Player"]
@@ -73,9 +84,9 @@ class GameState:
         for i in range(assigned, len(pool)):
             self.roles[pool[i]] = "villager"
 
-        # --- Private logbooks with randomized starting allegiances ---
+        # --- Private logbooks with randomized starting allegiances (roles play no part) ---
         npc_names = [c.name for c in characters]
-        self.logbooks = seed_logbooks(npc_names, self.roles, config.get("logbook", {}))
+        self.logbooks = seed_logbooks(npc_names, config.get("logbook", {}))
 
         # Transitional: keep the stat engine consistent with the logbook allegiances
         # until the LLM takes over decisions (stage 3 removes the trust matrix).
@@ -95,6 +106,9 @@ class GameState:
         if len(alive_werewolves) >= len(alive_villagers):
             return "werewolves_win"
         return None
+
+    def fake_claims_on(self, day: int) -> list[dict]:
+        return [c for c in self.fake_claims if c.get("day") == day]
 
     def is_coroner_alive(self) -> bool:
         return any(self.roles.get(name) == "coroner" for name in self.alive_characters)

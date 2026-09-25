@@ -2,7 +2,7 @@ import time
 from collections import Counter
 
 from core.dialogue_cache import DialoguePrefetcher
-from core.game_state import GamePhase, WIN_MESSAGES
+from core.game_state import GamePhase
 from core.trust_manager import TrustManager
 
 REVEAL_PAUSE_SECONDS = 1.5
@@ -111,67 +111,54 @@ class VotingPhase:
         io = gm.io
         state = gm.state
 
-        vote_counts = Counter(all_votes.values())
-        if "None" in vote_counts:
-            del vote_counts["None"]
+        vote_counts = Counter(t for t in all_votes.values() if t != "None")
+        drew_votes = list(vote_counts)
+        for char, count in vote_counts.items():
+            io.show_system(f"{char}: {count} votes", style="muted")
 
-        if not vote_counts:
-            io.show_system("The town failed to reach a decision. No one is lynched today.", style="warning")
-            state.public_events.append(
-                f"Day {state.day} Voting: The town was paralyzed by indecision. No one was hanged."
-            )
-        else:
-            max_votes = max(vote_counts.values())
-            tied_characters = [char for char, count in vote_counts.items() if count == max_votes]
-
-            # Show tally
-            for char, count in vote_counts.items():
-                io.show_system(f"{char}: {count} votes", style="muted")
-
-            if len(tied_characters) > 1:
-                io.show_system(
-                    f"There is a tie between {', '.join(tied_characters)}. "
-                    "The town is deadlocked. No one is lynched.", style="warning"
-                )
-                state.public_events.append(f"Day {state.day} Voting: A tie vote occurred. No one was hanged.")
+        top = max(vote_counts.values()) if vote_counts else 0
+        leaders = [c for c, n in vote_counts.items() if n == top]
+        if len(leaders) != 1:
+            if not vote_counts:
+                text = "Nobody cast a vote. The town could not bring itself to hang anyone."
             else:
-                lynched_char = tied_characters[0]
-                io.show_death(lynched_char, "lynched")
+                text = f"The vote is tied between {', '.join(leaders)}. The town could not agree, so nobody hangs today."
+            io.show_system(text, style="warning")
+            state.public_events.append(f"Day {state.day} Voting: {text}")
+            state.last_verdict = {"day": state.day, "hanged": None, "text": text, "drew_votes": drew_votes}
+            io.pause()
+            state.phase = GamePhase.AFTERMATH
+            return
 
-                # Final words — before execution
-                self._final_words(lynched_char)
+        lynched_char = leaders[0]
+        io.show_death(lynched_char, "lynched")
+        self._final_words(lynched_char)
 
-                state.alive_characters.remove(lynched_char)
-                state.public_events.append(f"Day {state.day} Voting: {lynched_char} was lynched by the town.")
-                state.public_events.append(f"Day {state.day}: {lynched_char} was lynched. Their true allegiance is unknown.")
+        state.alive_characters.remove(lynched_char)
+        text = f"{lynched_char} was hanged by the town. Their true allegiance is unknown."
+        state.public_events.append(f"Day {state.day} Voting: {lynched_char} was lynched by the town.")
+        state.last_verdict = {"day": state.day, "hanged": lynched_char, "text": text, "drew_votes": drew_votes}
 
-                if state.is_coroner_alive():
-                    lynched_role = state.roles.get(lynched_char, "villager")
-                    allegiance = "werewolf" if lynched_role == "werewolf" else "innocent"
+        if state.is_coroner_alive():
+            lynched_role = state.roles.get(lynched_char, "villager")
+            allegiance = "werewolf" if lynched_role == "werewolf" else "innocent"
+            coroner_name = next(n for n in state.alive_characters if state.roles.get(n) == "coroner")
+            finding = f"Day {state.day}: {lynched_char} was {allegiance}"
+            state.coroner_knowledge.append(finding)
+            gm.stat_engine.process_coroner_findings(finding)
+            if coroner_name == "Player":
+                io.show_system(
+                    f"CORONER INSIGHT: You examine the body — {lynched_char} was {allegiance.upper()}.",
+                    style="special"
+                )
 
-                    coroner_name = next(
-                        n for n in state.alive_characters if state.roles.get(n) == "coroner"
-                    )
-                    finding = f"Day {state.day}: {lynched_char} was {allegiance}"
-                    state.coroner_knowledge.append(finding)
-                    gm.stat_engine.process_coroner_findings(finding)
-
-                    if coroner_name == "Player":
-                        io.show_system(
-                            f"CORONER INSIGHT: You examine the body — {lynched_char} was {allegiance.upper()}.",
-                            style="special"
-                        )
-
-                if lynched_char == "Player":
-                    io.show_game_over("player_lynched", "You have been lynched by the town.")
-                    state.phase = GamePhase.GAME_OVER
-                    return
-
-                result = state.check_win_condition()
-                if result:
-                    io.show_game_over(result, WIN_MESSAGES[result])
-                    state.phase = GamePhase.GAME_OVER
-                    return
+        if lynched_char == "Player":
+            gm.end_game("player_lynched")
+            return
+        result = state.check_win_condition()
+        if result:
+            gm.end_game(result)
+            return
 
         io.pause()
-        state.phase = GamePhase.NIGHT
+        state.phase = GamePhase.AFTERMATH

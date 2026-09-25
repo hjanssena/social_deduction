@@ -53,15 +53,8 @@ def main():
     
     # 3. Inject into GameMaster
     gm = GameMaster(llm_service=llm, prompt_service=prompt_builder, characters=characters, config=config)
-    
-    gm.state.public_events.append("Last night, Victor's uncle mysteriously disappeared without a trace. Victor is the town Mayor.")
-    # 4. Run Day 0 Logic
-    mayor_event = "[Victor (Mayor)]: 'Quiet down! My uncle has vanished...'"
-    
-    # FIX 1: Access chat_history through the state object
-    gm.state.chat_history.append(mayor_event)
-    
-    # FIX 2: Kick off the actual state machine instead of a single manual reaction
+
+    # 4. Run the game: arrival, then night and day until someone wins
     gm.run_loop()
 
 if __name__ == "__main__":

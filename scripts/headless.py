@@ -19,7 +19,6 @@ from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.game_master import GameMaster  # noqa: E402
-from core.game_state import GamePhase  # noqa: E402
 from core.io_handler import IOHandler  # noqa: E402
 from main import apply_env_overrides  # noqa: E402
 from models.character import Character  # noqa: E402
@@ -98,9 +97,8 @@ def play(seed: int, config: dict, llm, echo: bool) -> dict:
         gm.run_loop()
 
     text = "\n".join(io.lines)
-    won = ("village" if "[VICTORY]" in text else
-           "wolves" if "[DEFEAT]" in text or "outnumber" in text else
-           "player died" if gm.state.phase == GamePhase.GAME_OVER else "unfinished")
+    won = {"village_wins": "village", "werewolves_win": "wolves", "player_killed": "player killed",
+           "player_lynched": "player hanged"}.get(gm.state.game_result, "unfinished")
     return {
         "seed": seed,
         "winner": won,
