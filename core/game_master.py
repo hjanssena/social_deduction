@@ -75,6 +75,7 @@ class GameMaster:
             headline = ("[VICTORY] " if won else "[DEFEAT] ") + WIN_MESSAGES[result]
         self.io.show_game_over(result, headline)
         self.io.show_final_roles(state.roles, state.alive_characters)
+        self.background.wait_idle()  # Let pending log entries land before saving the logbooks
         self.dump_logbooks(force=True)
         self.io.show_system(f"Every character's logbook is saved in {self.log_dir}/", style="info")
 

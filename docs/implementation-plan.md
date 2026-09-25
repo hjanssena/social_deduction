@@ -309,3 +309,24 @@ pressure come from milestone 2.
 | 6 | Balance and cleanup | M | all |
 
 Milestones 1 and 2 are independent. Milestones 4 and 5 can be built in either order once 3 is done.
+
+## Status (2026-09-25)
+
+All milestones are implemented on the `llm-game-loop` branch, one commit each, with pytest coverage
+(`uv run pytest`) and live headless games (`uv run python scripts/headless.py`).
+
+Details that differ from, or add to, the plan above:
+
+- **Once-per-day rolls.** Voluntary reveals are checked between every assertion round, so the Guardian
+  Angel's after-save claim and the pack's fake save claim roll only once per day (the pack rolls once
+  together). A per-round chance would make them near-certain.
+- **Killer tracking.** `decide_kill` also returns which wolf's preference carried the night; that wolf's
+  clue tags feed the true clue. When the Player is a wolf and makes the choice, the Player is the killer.
+- **The Player has clue tags too** (`crime_scene.player_tags`), so red herrings can point at the
+  traveler and a wolf Player can leave traces.
+- **The Coroner's scene finding** joins their normal findings, so it's shared in morning reports once they
+  have claimed the role.
+- **Trust.** `TrustManager` now only feeds the engine's fallbacks. Opinions and trust-change prints are gone;
+  Player penalties go on the public record instead.
+- **Headless runs** write a full transcript to `logs/headless/`, and every finished game saves the final
+  logbooks under `logs/<timestamp>/`.
