@@ -1,4 +1,5 @@
 import os
+import uuid
 import requests
 from services.llm_base import LLMBase
 
@@ -28,7 +29,16 @@ class OpenAIService(LLMBase):
         # gateways expect the raw key in a custom header such as "x-api-key".
         auth_header = oa_cfg.get("auth_header", "Authorization")
 
-        self.headers = {"Content-Type": "application/json"}
+        # Identify the game as its own client, and keep one session ID for the whole run so
+        # gateways such as OpenCode can route and cache prompts (they reject requests without it).
+        self.session_id = str(uuid.uuid4())
+        self.headers = {
+            "Content-Type": "application/json",
+            "User-Agent": oa_cfg.get("user_agent") or "social-deduction/1.0",
+        }
+        session_header = oa_cfg.get("session_header")
+        if session_header:
+            self.headers[session_header] = self.session_id
         if self.api_key:
             if auth_header.lower() == "authorization":
                 self.headers[auth_header] = f"Bearer {self.api_key}"

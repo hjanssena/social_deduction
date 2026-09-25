@@ -19,6 +19,8 @@ ENV_OVERRIDES = {
     "OPENAI_AUTH_HEADER": ("llm", "openai", "auth_header"),
     "OPENAI_MAX_TOKENS": ("llm", "openai", "max_tokens"),
     "OPENAI_REASONING": ("llm", "openai", "reasoning"),
+    "OPENAI_USER_AGENT": ("llm", "openai", "user_agent"),
+    "OPENAI_SESSION_HEADER": ("llm", "openai", "session_header"),
 }
 
 
