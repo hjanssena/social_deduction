@@ -45,6 +45,7 @@ class GameState:
         self.saved_last_night = None  # Set when the Guardian Angel protected that target
         self.last_verdict = None  # {"day", "hanged": name or None, "text"} from the latest vote
         self.votes_by_day = {}  # {day: {voter: target or "None"}}
+        self.threads = {}  # {day: [Thread]}: the day's discussion, one topic at a time (models/thread.py)
         self.chat_options = {}  # {day: [names]}: the villagers on offer for private chats, drawn once
         self.private_chats = []  # [{day, with, transcript}]: known only to the Player and that villager
         self.coroner_knowledge = []

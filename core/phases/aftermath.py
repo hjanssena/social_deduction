@@ -50,7 +50,7 @@ class AftermathPhase:
         state = self.gm.state
         npcs = [n for n in state.alive_characters if n != "Player"]
         random.shuffle(npcs)
-        cap = self.gm.config.get("max_reactions_per_assertion", 3)
+        cap = self.gm.config.get("max_aftermath_reactions", 3)
         hanged = verdict.get("hanged")
 
         if hanged:

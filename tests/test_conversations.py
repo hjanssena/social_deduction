@@ -72,7 +72,7 @@ def test_private_chat_stays_private(gm, llm, io):
     assert "SWORDFISH" in gm.state.private_chats[-1]["transcript"][1]
     assert "SWORDFISH" not in gm.get_public_record_text()
     llm.json_answers = [{"intent": "neutral", "dialogue": "hm"}]
-    gm.npc_controller.generate_assertion(other, 0)
+    gm.npc_controller.take_turn(other, "open", None, [])
     assert "SWORDFISH" not in llm.last_prompt
 
 

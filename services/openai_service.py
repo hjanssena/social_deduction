@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 import requests
 from services.llm_base import LLMBase
@@ -59,6 +60,25 @@ class OpenAIService(LLMBase):
             return False
         return None
 
+    RETRY_DELAYS = (1, 4)  # seconds before each retry of a failed request
+
+    def _post(self, payload: dict):
+        """POSTs the request, retrying server-side failures: 5xx, rate limits, and gateways that report an
+        upstream failure as a 400 ("Upstream request failed"). These come in short bursts."""
+        for delay in (*self.RETRY_DELAYS, None):
+            try:
+                response = requests.post(f"{self.base_url}/chat/completions", headers=self.headers,
+                                         json=payload, timeout=self.timeout)
+            except requests.RequestException:
+                if delay is None:
+                    raise
+            else:
+                transient = response.status_code >= 500 or response.status_code == 429 or (
+                    response.status_code == 400 and "server_error" in response.text)
+                if response.ok or not transient or delay is None:
+                    return response
+            time.sleep(delay)
+
     def _chat(self, system_prompt: str, user_prompt: str, cfg: dict, json_mode: bool = False) -> str:
         payload = {
             "model": self.model,
@@ -85,12 +105,7 @@ class OpenAIService(LLMBase):
         if json_mode and self.json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        response = requests.post(
-            f"{self.base_url}/chat/completions",
-            headers=self.headers,
-            json=payload,
-            timeout=self.timeout,
-        )
+        response = self._post(payload)
         if not response.ok:
             raise RuntimeError(f"HTTP {response.status_code}: {response.text[:500]}")
 

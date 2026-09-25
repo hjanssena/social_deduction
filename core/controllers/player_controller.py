@@ -10,19 +10,6 @@ class PlayerController:
     def io(self):
         return self.gm.io
 
-    def get_status(self, current_assertion: int) -> str:
-        """Determines if the player is violating the action thresholds."""
-        actions = self.gm.state.player_actions_today
-        max_actions = self.gm.config.get("player_max_actions", 4)
-        min_actions = self.gm.config.get("player_min_actions", 2)
-        max_assertions = self.gm.config.get("max_assertions_per_day", 8)
-
-        if actions > max_actions:
-            return "dominating"
-        elif current_assertion >= (max_assertions // 2) and actions < min_actions:
-            return "silent"
-        return "normal"
-
     # ------------------------------------------------------------------
     # Parsing
     # ------------------------------------------------------------------

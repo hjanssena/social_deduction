@@ -11,46 +11,6 @@ class NPCController:
     def __init__(self, gm):
         self.gm = gm
 
-    def calculate_bids(self, multipliers: dict) -> str:
-        """Calculates which NPC speaks next."""
-        npc_names = [name for name in self.gm.state.alive_characters if name != "Player"]
-        if not npc_names:
-            return None
-
-        weights = []
-        for name in npc_names:
-            char_obj = self.gm.characters[name]
-            weight = char_obj.assertion_drive * multipliers.get(name, 1.0)
-            weights.append(weight)
-
-        chosen_speaker = random.choices(npc_names, weights=weights, k=1)[0]
-        return chosen_speaker
-
-    def build_reaction_queue(self, primary_speaker: str, target: str) -> list[str]:
-        """Picks who gets a chance to react: the target first, then NPCs with a stake read off
-        their allegiance tables (the target's friends and packmates before anyone who merely
-        knows the speaker or target), then one random bystander. Each may still stay silent."""
-        alive_npcs = [n for n in self.gm.state.alive_characters if n not in ("Player", primary_speaker)]
-        queue = [target] if target in alive_npcs else []
-
-        def stake(npc):
-            book = self.gm.state.logbooks.get(npc)
-            if not book:
-                return 0
-            if target in book.pack or book.relation_to(target) == "friend":
-                return 2
-            involved = [n for n in (primary_speaker, target) if n not in ("None", "Player")]
-            return 1 if any(book.relation_to(n) or n in book.pack for n in involved) else 0
-
-        others = [n for n in alive_npcs if n not in queue]
-        random.shuffle(others)
-        others.sort(key=stake, reverse=True)
-        concerned = [n for n in others if stake(n) > 0]
-        bystanders = [n for n in others if stake(n) == 0]
-
-        cap = self.gm.config.get("max_reactions_per_assertion", 3)
-        return (queue + concerned + bystanders[:1])[:max(cap, len(queue))]
-
     # ================================================================
     # LOGBOOKS
     # ================================================================
@@ -243,82 +203,78 @@ class NPCController:
             "emotion": emotion,
             "reasoning": str(data.get("thought", "")).strip(),
             "dialogue": dialogue,
+            "topic": str(data.get("topic") or "").strip().strip('"').rstrip(".")[:80],
         }
 
-    def _decide(self, name: str, prompt: str, allowed: str, fallback_target: str = "None") -> dict:
-        """One LLM call that decides and speaks, validated. If the line nearly repeats something
-        this character already said, retries once naming that line (small models otherwise
-        loop on their stock sayings)."""
+    def _decide(self, name: str, prompt: str, allowed: str, fallback_target: str = "None",
+                others: list[tuple[str, str]] = ()) -> dict:
+        """One LLM call that decides and speaks, validated. If the line nearly repeats something this
+        character already said, or a line someone else just said (`others`: (speaker, line) pairs, e.g.
+        the current thread), retries once naming that line (small models otherwise loop on stock sayings
+        and pile on with the same question)."""
         system = self._system_prompt(name)
         result = self._validate_decision(
             self.gm.llm.generate_json(system, prompt, True), name, allowed, fallback_target)
-        repeated = self._repeated_line(name, result["dialogue"])
+        repeated = self._repeated_line(name, result["dialogue"], others)
         if repeated:
-            retry = prompt + f'\n\nYou already said: "{repeated}". Say something different this time.'
+            who, line = repeated
+            said = "You already said" if who == name else f"{who} already said"
+            retry = prompt + f'\n\n{said}: "{line}". Say something different this time.'
             result = self._validate_decision(
                 self.gm.llm.generate_json(system, retry, True), name, allowed, fallback_target)
         return result
 
-    def _repeated_line(self, name: str, dialogue: str) -> str | None:
-        """Returns the earlier line of this character's (or one of their example lines, which are
-        style references only) that `dialogue` nearly repeats, if any."""
+    def _repeated_line(self, name: str, dialogue: str, others: list[tuple[str, str]] = ()) -> tuple[str, str] | None:
+        """(speaker, line) of the earlier line that `dialogue` nearly repeats, if any: this character's own
+        recent lines and example lines (style references only), and `others`."""
         if not dialogue:
             return None
         own = [r["dialogue"] for r in self.gm.state.public_record if r["speaker"] == name and r.get("dialogue")]
         examples = [line for per_intent in self.gm.characters[name].speech_examples.values()
                     if isinstance(per_intent, dict) for line in per_intent.values() if "{target}" not in line]
-        for line in own[-5:] + examples:
+        candidates = [(name, line) for line in own[-5:] + examples] + [(w, l) for w, l in others if l]
+        for who, line in candidates:
             if SequenceMatcher(None, dialogue.lower(), line.lower()).ratio() >= 0.7:
-                return line
+                return who, line
         return None
 
     # ================================================================
-    # ASSERTION PIPELINE: one LLM call decides and speaks, the engine validates
+    # THREAD TURNS: one LLM call per turn; the director picks who and in which role
     # ================================================================
 
-    def generate_assertion(self, speaker_name: str, current_assertion: int) -> dict:
-        """Pure generation — no state mutations, no display. Caller applies side effects."""
-        prompt = self.gm.prompt_builder.build_assertion_prompt(
-            stakes_text=self._stakes_text(speaker_name),
-            **self._context_kwargs(speaker_name),
+    def _said_today(self, name: str, exclude=(), limit: int = 4) -> list[str]:
+        """This character's own lines earlier today (not those already in the current thread), so a
+        denial in one thread still binds them in the next."""
+        in_thread = {t.dialogue for t in exclude if t.speaker == name}
+        lines = [r["dialogue"] for r in self.gm.state.public_record
+                 if r["day"] == self.gm.state.day and r["speaker"] == name and r.get("dialogue")
+                 and r["dialogue"] not in in_thread]
+        return lines[-limit:]
+
+    def take_turn(self, name: str, role: str, thread, earlier_today: list[str], last_topic: str = "") -> dict | None:
+        """One line in the day's discussion (see DiscussionDirector). role is "open", "answer" or "join".
+        Pure generation, no state changes. Returns None when a joiner passes or an opener has nothing to say."""
+        last = thread.last if thread is not None else None
+        owed_by, owed_line = (last.speaker, last.dialogue) if role == "answer" and last else ("", "")
+        prompt = self.gm.prompt_builder.build_turn_prompt(
+            character=self.gm.characters[name], role=role, day=self.gm.state.day,
+            game_context=self.gm.get_game_context(), roster_text=self.gm.get_roster_text(viewer=name),
+            claims_text=self.gm.get_claims_text(), earlier_today=earlier_today,
+            thread_text=thread.render() if thread is not None else "",
+            stakes_text=self._stakes_text(name, last.speaker if last else None, last.target if last else None),
+            owed_by=owed_by, owed_line=owed_line, last_topic=last_topic,
+            own_lines=self._said_today(name, exclude=thread.turns if thread is not None else ()),
         )
-        result = self._decide(speaker_name, prompt, NPC_INTENTS)
+        allowed = NPC_INTENTS + ("|pass|silent" if role == "join" else "")
+        others = [(t.speaker, t.dialogue) for t in thread.turns] if thread is not None else []
+        result = self._decide(name, prompt, allowed, fallback_target=owed_by or "None", others=others)
+
+        if role in ("join", "open") and (result["intent"] in ("pass", "silent") or not result["dialogue"]):
+            return None  # a joiner passes; an opener with nothing to say leaves the floor to someone else
         if not result["dialogue"]:
-            result.update(intent="neutral", target="None", dialogue="... (Glares in silence)")
-        return result
-
-    # ================================================================
-    # REACTION PIPELINE: one LLM call decides whether and how to react
-    # ================================================================
-
-    def process_reaction(self, primary_speaker: str, assertion_data: dict,
-                         reactor_name: str, current_assertion: int,
-                         reaction_chain: list = None):
-        """Pure generation — no state mutations, no display. Caller applies side effects.
-        Returns None when the reactor chooses to stay silent.
-
-        Args:
-            primary_speaker: The original asserter's name.
-            assertion_data: The original assertion that started this reaction chain.
-            reactor_name: Who is reacting.
-            current_assertion: Index of current assertion round.
-            reaction_chain: List of {speaker, dialogue, intent} dicts for reactions so far.
-        """
-        speaker_target = assertion_data.get("target", "None")
-        prompt = self.gm.prompt_builder.build_reaction_prompt(
-            assertion_speaker=primary_speaker,
-            assertion_target=speaker_target,
-            assertion_dialogue=assertion_data.get("dialogue", "..."),
-            reaction_chain=list(reaction_chain or []),
-            stakes_text=self._stakes_text(reactor_name, primary_speaker, speaker_target),
-            **self._context_kwargs(reactor_name),
-        )
-        result = self._decide(reactor_name, prompt, NPC_REACTION_INTENTS, fallback_target=primary_speaker)
-        if result["intent"] == "silent" or not result["dialogue"]:
-            return None
-
-        result["primary_speaker"] = primary_speaker
-        result["intensity"] = "high" if speaker_target == reactor_name else "medium"
+            result.update(intent="deflect", target="None", dialogue=self.gm.conversation_controller._deflection(name))
+        if result["intent"] in ("pass", "silent"):
+            result["intent"] = "neutral"
         return result
 
     # ================================================================

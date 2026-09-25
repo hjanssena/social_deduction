@@ -149,9 +149,13 @@ class IOHandler:
     # Structured prompt methods
     # ------------------------------------------------------------------
 
-    def prompt_assertion(self) -> str:
-        """Prompt the player for an assertion (or Enter to skip)."""
-        return self.prompt("[Press Enter to advance, or type to make an assertion] > ")
+    def prompt_open_topic(self) -> str:
+        """Between topics: the player may raise one (or Enter to listen)."""
+        return self.prompt("[Press Enter to listen, or type to raise a new topic] > ")
+
+    def prompt_join(self) -> str:
+        """During a topic: the player may join in (or Enter to let it go on)."""
+        return self.prompt("[Press Enter to continue, or type to join in] > ")
 
     def prompt_reaction(self, speaker: str) -> str:
         """Prompt the player for a reaction (or Enter to skip)."""

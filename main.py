@@ -35,7 +35,8 @@ def apply_env_overrides(config: dict):
                 section = section.setdefault(key, {})
             section[path[-1]] = value
 
-    for var, key in (("DEBUG_SHOW_LOGIC", "show_logic"), ("DEBUG_DUMP_LOGBOOKS", "dump_logbooks")):
+    for var, key in (("DEBUG_SHOW_LOGIC", "show_logic"), ("DEBUG_DUMP_LOGBOOKS", "dump_logbooks"),
+                     ("DEBUG_SHOW_THREADS", "show_threads")):
         value = os.getenv(var)
         if value:
             config.setdefault("debug", {})[key] = value.lower() in ("1", "true", "yes")
